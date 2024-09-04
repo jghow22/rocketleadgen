@@ -35,17 +35,36 @@ def handle_wix_webhook():
         logging.info(f"Received data from Wix: {data}")
 
         # Extract relevant fields from the form submission
-        name = data.get('name')
-        email = data.get('email')
-        message = data.get('message')
+        form_data = data.get('data', {})
+        submissions = form_data.get('submissions', [])
 
-        # Check if the required fields are present
-        if not name or not email or not message:
-            logging.error("Missing data fields in the received webhook payload.")
-            return jsonify({"status": "error", "message": "Missing data fields"}), 400
+        # Initialize variables for extracted information
+        name = None
+        email = None
+        message = ""
 
-        # Prepare the message to be sent to Discord
-        discord_message = f"New Lead:\nName: {name}\nEmail: {email}\nMessage: {message}"
+        # Extract specific fields based on the labels
+        for submission in submissions:
+            if submission['label'] == 'First name':
+                first_name = submission['value']
+            elif submission['label'] == 'Last name':
+                last_name = submission['value']
+            elif submission['label'] == 'Email':
+                email = submission['value']
+            elif submission['label'] == 'Phone':
+                phone = submission['value']
+            elif submission['label'] == 'Product':
+                product = submission['value']
+
+        # Combine first and last name
+        name = f"{first_name} {last_name}"
+
+        # Construct the message to be sent to Discord
+        if not name or not email:
+            logging.error("Missing essential data fields in the received webhook payload.")
+            return jsonify({"status": "error", "message": "Missing essential data fields"}), 400
+
+        discord_message = f"New Lead:\nName: {name}\nEmail: {email}\nPhone: {phone}\nProduct: {product}"
         logging.info(f"Prepared message for Discord: {discord_message}")
 
         # Send a message to Discord
