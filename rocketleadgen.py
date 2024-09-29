@@ -47,21 +47,21 @@ def handle_wix_webhook():
         estimated_credit = None
         zip_code = None
 
-        # Extract specific fields based on the labels
+        # Extract specific fields based on the labels in the `submissions` list
         for submission in submissions:
             if submission['label'] == 'Name':
                 name = submission['value']
-            elif submission['label'] == 'Phone number':
+            elif submission['label'] == 'Phone':  # Updated label for phone
                 phone_number = submission['value']
             elif submission['label'] == 'Gender':
                 gender = submission['value']
             elif submission['label'] == 'Age':
                 age = submission['value']
-            elif submission['label'] == 'Nicotiene use':
+            elif submission['label'] == 'Nicotine use':  # Updated label for nicotine use
                 nicotine_use = submission['value']
-            elif submission['label'] == 'Estimated credit':
+            elif submission['label'] == 'Estimated credit':  # Updated label for estimated credit
                 estimated_credit = submission['value']
-            elif submission['label'] == 'Zip code':
+            elif submission['label'] == 'Zip Code':  # Updated label for zip code
                 zip_code = submission['value']
 
         # Ensure required fields are present
@@ -76,7 +76,7 @@ def handle_wix_webhook():
             f"Phone Number: {phone_number}\n"
             f"Gender: {gender}\n"
             f"Age: {age}\n"
-            f"Nicotiene Use: {nicotine_use}\n"
+            f"Nicotine Use: {nicotine_use}\n"
             f"Estimated Credit: {estimated_credit}\n"
             f"Zip Code: {zip_code}"
         )
@@ -126,4 +126,5 @@ if __name__ == '__main__':
 
     # Start the Discord bot in the main thread
     run_discord_bot()
+
 
