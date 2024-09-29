@@ -12,7 +12,7 @@ logging.basicConfig(level=logging.INFO)
 DISCORD_TOKEN = 'MTI3OTkyOTE1OTEzNjU3NTUxOA.GgNms2.CFQewGJ7-7smOxcS6tmPwtOLCtZERzAMvJn9yo'  # Replace with your actual token
 
 # Discord channel ID where the bot will send messages
-DISCORD_CHANNEL_ID = 1278846206445097030  # Replace with the actual channel ID
+DISCORD_CHANNEL_ID = 1281081570253475923  # Replace with the actual channel ID
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -40,31 +40,46 @@ def handle_wix_webhook():
 
         # Initialize variables for extracted information
         name = None
-        email = None
-        message = ""
+        phone_number = None
+        gender = None
+        age = None
+        nicotine_use = None
+        estimated_credit = None
+        zip_code = None
 
         # Extract specific fields based on the labels
         for submission in submissions:
-            if submission['label'] == 'First name':
-                first_name = submission['value']
-            elif submission['label'] == 'Last name':
-                last_name = submission['value']
-            elif submission['label'] == 'Email':
-                email = submission['value']
-            elif submission['label'] == 'Phone':
-                phone = submission['value']
-            elif submission['label'] == 'Product':
-                product = submission['value']
+            if submission['label'] == 'Name':
+                name = submission['value']
+            elif submission['label'] == 'Phone number':
+                phone_number = submission['value']
+            elif submission['label'] == 'Gender':
+                gender = submission['value']
+            elif submission['label'] == 'Age':
+                age = submission['value']
+            elif submission['label'] == 'Nicotiene use':
+                nicotine_use = submission['value']
+            elif submission['label'] == 'Estimated credit':
+                estimated_credit = submission['value']
+            elif submission['label'] == 'Zip code':
+                zip_code = submission['value']
 
-        # Combine first and last name
-        name = f"{first_name} {last_name}"
-
-        # Construct the message to be sent to Discord
-        if not name or not email:
+        # Ensure required fields are present
+        if not name or not phone_number:
             logging.error("Missing essential data fields in the received webhook payload.")
             return jsonify({"status": "error", "message": "Missing essential data fields"}), 400
 
-        discord_message = f"New Lead:\nName: {name}\nEmail: {email}\nPhone: {phone}\nProduct: {product}"
+        # Construct the message to be sent to Discord
+        discord_message = (
+            f"New Lead:\n"
+            f"Name: {name}\n"
+            f"Phone Number: {phone_number}\n"
+            f"Gender: {gender}\n"
+            f"Age: {age}\n"
+            f"Nicotiene Use: {nicotine_use}\n"
+            f"Estimated Credit: {estimated_credit}\n"
+            f"Zip Code: {zip_code}"
+        )
         logging.info(f"Prepared message for Discord: {discord_message}")
 
         # Send a message to Discord
@@ -111,3 +126,4 @@ if __name__ == '__main__':
 
     # Start the Discord bot in the main thread
     run_discord_bot()
+
