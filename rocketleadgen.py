@@ -44,7 +44,6 @@ def handle_wix_webhook():
         gender = None
         age = None
         nicotine_use = None
-        estimated_credit = None
         zip_code = None
 
         # Extract specific fields based on the labels in the `submissions` list
@@ -59,8 +58,6 @@ def handle_wix_webhook():
                 age = submission['value']
             elif submission['label'] == 'Nicotine use':  # Updated label for nicotine use
                 nicotine_use = submission['value']
-            elif submission['label'] == 'Estimated credit':  # Updated label for estimated credit
-                estimated_credit = submission['value']
             elif submission['label'] == 'Zip Code':  # Updated label for zip code
                 zip_code = submission['value']
 
@@ -69,7 +66,7 @@ def handle_wix_webhook():
             logging.error("Missing essential data fields in the received webhook payload.")
             return jsonify({"status": "error", "message": "Missing essential data fields"}), 400
 
-        # Construct the message to be sent to Discord
+        # Construct the message to be sent to Discord (without Estimated Credit)
         discord_message = (
             f"New Lead:\n"
             f"Name: {name}\n"
@@ -77,7 +74,6 @@ def handle_wix_webhook():
             f"Gender: {gender}\n"
             f"Age: {age}\n"
             f"Nicotine Use: {nicotine_use}\n"
-            f"Estimated Credit: {estimated_credit}\n"
             f"Zip Code: {zip_code}"
         )
         logging.info(f"Prepared message for Discord: {discord_message}")
