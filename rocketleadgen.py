@@ -50,15 +50,15 @@ def handle_wix_webhook():
         for submission in submissions:
             if submission['label'] == 'Name':
                 name = submission['value']
-            elif submission['label'] == 'Phone':  # Updated label for phone
+            elif submission['label'] == 'Phone':
                 phone_number = submission['value']
             elif submission['label'] == 'Gender':
                 gender = submission['value']
             elif submission['label'] == 'Age':
                 age = submission['value']
-            elif submission['label'] == 'Nicotine use':  # Updated label for nicotine use
+            elif submission['label'] == 'Nicotine use':
                 nicotine_use = submission['value']
-            elif submission['label'] == 'Zip Code':  # Updated label for zip code
+            elif submission['label'] == 'Zip Code':
                 zip_code = submission['value']
 
         # Ensure required fields are present
@@ -66,23 +66,25 @@ def handle_wix_webhook():
             logging.error("Missing essential data fields in the received webhook payload.")
             return jsonify({"status": "error", "message": "Missing essential data fields"}), 400
 
-        # Construct the message to be sent to Discord (without Estimated Credit)
-        discord_message = (
-            f"New Lead:\n"
-            f"Name: {name}\n"
-            f"Phone Number: {phone_number}\n"
-            f"Gender: {gender}\n"
-            f"Age: {age}\n"
-            f"Nicotine Use: {nicotine_use}\n"
-            f"Zip Code: {zip_code}"
-        )
-        logging.info(f"Prepared message for Discord: {discord_message}")
+        # Construct the embed for Discord
+        embed = discord.Embed(title="New Lead", color=0x00ff00)
+        embed.add_field(name="Name", value=name, inline=True)
+        embed.add_field(name="Phone Number", value=phone_number, inline=True)
+        embed.add_field(name="Gender", value=gender, inline=True)
+        embed.add_field(name="Age", value=age, inline=True)
+        embed.add_field(name="Nicotine Use", value=nicotine_use, inline=True)
+        embed.add_field(name="Zip Code", value=zip_code, inline=True)
+        
+        # Add the footer with "Happy selling!"
+        embed.set_footer(text="Lead generated via Wix form | Happy selling!")
 
-        # Send a message to Discord
+        logging.info(f"Prepared embed for Discord: {embed.to_dict()}")
+
+        # Send the embed to Discord
         channel = bot.get_channel(DISCORD_CHANNEL_ID)
         if channel:
-            asyncio.run_coroutine_threadsafe(channel.send(discord_message), bot.loop)
-            logging.info("Message successfully sent to Discord")
+            asyncio.run_coroutine_threadsafe(channel.send(embed=embed), bot.loop)
+            logging.info("Embed successfully sent to Discord")
         else:
             logging.error(f"Could not find channel with ID: {DISCORD_CHANNEL_ID}")
             return jsonify({"status": "error", "message": "Invalid Discord channel ID"}), 500
@@ -122,5 +124,6 @@ if __name__ == '__main__':
 
     # Start the Discord bot in the main thread
     run_discord_bot()
+
 
 
