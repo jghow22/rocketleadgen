@@ -4,6 +4,8 @@ from flask import Flask, request, jsonify
 import asyncio
 import logging
 import pandas as pd
+import requests
+from io import StringIO
 from threading import Thread
 import time
 
@@ -16,8 +18,8 @@ DISCORD_TOKEN = 'MTI3OTkyOTE1OTEzNjU3NTUxOA.GgNms2.CFQewGJ7-7smOxcS6tmPwtOLCtZER
 # Discord channel ID where the bot will send messages
 DISCORD_CHANNEL_ID = 1281081570253475923  # Replace with the actual channel ID
 
-# Path to the CSV file containing the leads
-LEADS_FILE_PATH = '/Users/JamesHoward/Desktop/leadslistseptwenty.csv'  # Update this with the correct path
+# URL of the CSV file in your GitHub repository
+CSV_FILE_URL = 'https://github.com/jghow22/rocketleadgen/blob/main/leadslistseptwenty.csv'  # Update this with the correct URL
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -30,16 +32,20 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # Global variable to keep track of the current lead index
 current_lead_index = 0
 
-def read_leads_from_csv(file_path):
+def download_csv_from_github(url):
     """
-    Reads the leads from the given CSV file and returns them as a DataFrame.
+    Downloads the CSV file from the given GitHub URL and returns it as a DataFrame.
     """
     try:
-        df = pd.read_csv(file_path)
-        logging.info(f"Successfully read {len(df)} leads from the CSV file.")
+        response = requests.get(url)
+        response.raise_for_status()  # Check for HTTP errors
+
+        # Read the content of the downloaded CSV file into a DataFrame
+        df = pd.read_csv(StringIO(response.text))
+        logging.info(f"Successfully downloaded {len(df)} leads from the CSV file on GitHub.")
         return df
     except Exception as e:
-        logging.error(f"Error reading leads from CSV file: {str(e)}")
+        logging.error(f"Error downloading CSV file from GitHub: {str(e)}")
         return None
 
 async def send_lead(channel):
@@ -47,7 +53,7 @@ async def send_lead(channel):
     Sends a lead from the CSV file to the specified Discord channel.
     """
     global current_lead_index
-    leads = read_leads_from_csv(LEADS_FILE_PATH)
+    leads = download_csv_from_github(CSV_FILE_URL)
 
     if leads is None or leads.empty:
         logging.warning("No leads found in the CSV file.")
@@ -192,4 +198,6 @@ if __name__ == '__main__':
     flask_thread.start()
 
     # Start the Discord bot in the main thread
+    run_discord_bot()
+main thread
     run_discord_bot()
