@@ -18,7 +18,7 @@ DISCORD_TOKEN = 'MTI3OTkyOTE1OTEzNjU3NTUxOA.GgNms2.CFQewGJ7-7smOxcS6tmPwtOLCtZER
 DISCORD_CHANNEL_ID = 1281081570253475923  # Replace with the actual channel ID
 
 # Path to the local CSV file (update this to the relative path where the file is located)
-CSV_FILE_PATH = '/Users/James Howard/Desktop/leadslistseptwenty.csv'  # Update this if the file is in a subfolder
+CSV_FILE_PATH = '/Users/James Howard/Desktop/leadslistseptwenty.csv'  # Update this with the actual path
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -33,10 +33,16 @@ current_lead_index = 0
 
 def read_leads_from_csv(file_path):
     """
-    Reads the leads from the given CSV file and returns them as a DataFrame.
+    Reads the leads from the given CSV file and filters the necessary columns.
     """
     try:
+        # Load the CSV file into a DataFrame
         df = pd.read_csv(file_path)
+
+        # Filter the DataFrame to only keep the relevant columns
+        required_columns = ['Name', 'Phone', 'Gender', 'Age', 'Zip Code']
+        df = df[required_columns]
+
         logging.info(f"Successfully read {len(df)} leads from the CSV file.")
         return df
     except Exception as e:
@@ -57,7 +63,7 @@ async def send_lead(channel):
     # Get the current lead
     lead = leads.iloc[current_lead_index]
 
-    # Prepare the message content
+    # Extract the fields, handling missing values gracefully
     name = lead.get("Name", "N/A")
     phone_number = lead.get("Phone", "N/A")
     gender = lead.get("Gender", "N/A")
