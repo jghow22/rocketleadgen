@@ -19,7 +19,7 @@ DISCORD_TOKEN = 'MTI3OTkyOTE1OTEzNjU3NTUxOA.GgNms2.CFQewGJ7-7smOxcS6tmPwtOLCtZER
 DISCORD_CHANNEL_ID = 1281081570253475923  # Replace with the actual channel ID
 
 # URL of the CSV file in your GitHub repository
-CSV_FILE_URL = 'https://raw.githubusercontent.com/jghow22/rocketleadgen/refs/heads/main/leadslistseptwenty.csv?token=GHSAT0AAAAAACX7Y3AVA3JHI4YFHSYEWLN4ZYVXEUQ'  # Update this with the correct URL
+CSV_FILE_URL = 'https://github.com/jghow22/rocketleadgen/blob/2e2a77fe2c21a3127c635ef325b36640acebbf15/leadslistseptwenty.csv'  # Update this with the correct URL
 
 # Initialize Flask app
 app = Flask(__name__)
