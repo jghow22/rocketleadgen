@@ -42,8 +42,10 @@ def read_leads_from_csv(file_path):
         logging.error(f"Error reading leads from CSV file: {str(e)}")
         return None
 
-@tasks.loop(minutes=30)
-async def send_lead_from_csv():
+async def send_lead(channel):
+    """
+    Sends a lead from the CSV file to the specified Discord channel.
+    """
     global current_lead_index
     leads = read_leads_from_csv(LEADS_FILE_PATH)
 
@@ -71,7 +73,6 @@ async def send_lead_from_csv():
     embed.set_footer(text="Happy selling!")
 
     # Send the embed to Discord
-    channel = bot.get_channel(DISCORD_CHANNEL_ID)
     if channel:
         await channel.send(embed=embed)
         logging.info(f"Sent warm lead to Discord: {name}")
@@ -80,6 +81,11 @@ async def send_lead_from_csv():
         current_lead_index = (current_lead_index + 1) % len(leads)
     else:
         logging.error(f"Could not find channel with ID: {DISCORD_CHANNEL_ID}")
+
+@tasks.loop(minutes=30)
+async def send_lead_from_csv():
+    channel = bot.get_channel(DISCORD_CHANNEL_ID)
+    await send_lead(channel)
 
 @app.route('/wix-webhook', methods=['POST'])
 def handle_wix_webhook():
@@ -155,7 +161,14 @@ async def on_ready():
     logging.info(f'Logged in as {bot.user} (ID: {bot.user.id})')
     logging.info('Bot is online and ready.')
     logging.info('------')
-    send_lead_from_csv.start()  # Start the task for sending leads from the CSV file
+
+    # Send a lead from the CSV immediately when the bot starts
+    channel = bot.get_channel(DISCORD_CHANNEL_ID)
+    if channel:
+        bot.loop.create_task(send_lead(channel))
+
+    # Start the task for sending leads from the CSV file every 30 minutes
+    send_lead_from_csv.start()
 
 @bot.event
 async def on_disconnect():
@@ -180,6 +193,3 @@ if __name__ == '__main__':
 
     # Start the Discord bot in the main thread
     run_discord_bot()
-
-
-
