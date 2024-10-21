@@ -102,7 +102,7 @@ async def send_lead(channel):
     else:
         logging.error(f"Could not find channel with ID: {DISCORD_CHANNEL_ID}")
 
-@tasks.loop(minutes=30)
+@tasks.loop(minutes=15)  # Change interval to 15 minutes
 async def send_lead_from_csv():
     channel = bot.get_channel(DISCORD_CHANNEL_ID)
     await send_lead(channel)
