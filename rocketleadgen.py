@@ -1,9 +1,11 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from flask import Flask, request, jsonify
 import asyncio
 import logging
+import pandas as pd
 from threading import Thread
+import time
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -14,6 +16,9 @@ DISCORD_TOKEN = 'MTI3OTkyOTE1OTEzNjU3NTUxOA.GgNms2.CFQewGJ7-7smOxcS6tmPwtOLCtZER
 # Discord channel ID where the bot will send messages
 DISCORD_CHANNEL_ID = 1281081570253475923  # Replace with the actual channel ID
 
+# Path to the CSV file containing the leads
+LEADS_FILE_PATH = '/Users/JamesHoward/Desktop/leadslistseptwenty.csv'  # Update this with the correct path
+
 # Initialize Flask app
 app = Flask(__name__)
 
@@ -21,6 +26,60 @@ app = Flask(__name__)
 intents = discord.Intents.default()
 intents.message_content = True  # Enable the message content intent
 bot = commands.Bot(command_prefix="!", intents=intents)
+
+# Global variable to keep track of the current lead index
+current_lead_index = 0
+
+def read_leads_from_csv(file_path):
+    """
+    Reads the leads from the given CSV file and returns them as a DataFrame.
+    """
+    try:
+        df = pd.read_csv(file_path)
+        logging.info(f"Successfully read {len(df)} leads from the CSV file.")
+        return df
+    except Exception as e:
+        logging.error(f"Error reading leads from CSV file: {str(e)}")
+        return None
+
+@tasks.loop(minutes=30)
+async def send_lead_from_csv():
+    global current_lead_index
+    leads = read_leads_from_csv(LEADS_FILE_PATH)
+
+    if leads is None or leads.empty:
+        logging.warning("No leads found in the CSV file.")
+        return
+
+    # Get the current lead
+    lead = leads.iloc[current_lead_index]
+
+    # Prepare the message content
+    name = lead.get("Name", "N/A")
+    phone_number = lead.get("Phone", "N/A")
+    gender = lead.get("Gender", "N/A")
+    age = lead.get("Age", "N/A")
+    zip_code = lead.get("Zip Code", "N/A")
+
+    # Construct the embed for Discord
+    embed = discord.Embed(title="Warm Lead", color=0x0000ff)  # Warm lead color
+    embed.add_field(name="Name", value=name, inline=True)
+    embed.add_field(name="Phone Number", value=phone_number, inline=True)
+    embed.add_field(name="Gender", value=gender, inline=True)
+    embed.add_field(name="Age", value=age, inline=True)
+    embed.add_field(name="Zip Code", value=zip_code, inline=True)
+    embed.set_footer(text="Happy selling!")
+
+    # Send the embed to Discord
+    channel = bot.get_channel(DISCORD_CHANNEL_ID)
+    if channel:
+        await channel.send(embed=embed)
+        logging.info(f"Sent warm lead to Discord: {name}")
+
+        # Update the current lead index for the next run
+        current_lead_index = (current_lead_index + 1) % len(leads)
+    else:
+        logging.error(f"Could not find channel with ID: {DISCORD_CHANNEL_ID}")
 
 @app.route('/wix-webhook', methods=['POST'])
 def handle_wix_webhook():
@@ -67,18 +126,14 @@ def handle_wix_webhook():
             return jsonify({"status": "error", "message": "Missing essential data fields"}), 400
 
         # Construct the embed for Discord
-        embed = discord.Embed(title="New Lead", color=0x00ff00)
+        embed = discord.Embed(title="Hot Lead", color=0xff0000)  # Hot lead color
         embed.add_field(name="Name", value=name, inline=True)
         embed.add_field(name="Phone Number", value=phone_number, inline=True)
         embed.add_field(name="Gender", value=gender, inline=True)
         embed.add_field(name="Age", value=age, inline=True)
-        embed.add_field(name="Nicotine Use", value=nicotine_use, inline=True)
+        embed.add_field(name="Nicotine Use", value=nicotine_use, inline=True)  # Include Nicotine Use for hot leads
         embed.add_field(name="Zip Code", value=zip_code, inline=True)
-        
-        # Add the footer with "Happy selling!"
         embed.set_footer(text="Lead generated via Wix form | Happy selling!")
-
-        logging.info(f"Prepared embed for Discord: {embed.to_dict()}")
 
         # Send the embed to Discord
         channel = bot.get_channel(DISCORD_CHANNEL_ID)
@@ -100,6 +155,7 @@ async def on_ready():
     logging.info(f'Logged in as {bot.user} (ID: {bot.user.id})')
     logging.info('Bot is online and ready.')
     logging.info('------')
+    send_lead_from_csv.start()  # Start the task for sending leads from the CSV file
 
 @bot.event
 async def on_disconnect():
@@ -115,7 +171,7 @@ def run_discord_bot():
         except Exception as e:
             logging.error(f"Error occurred while running the bot: {str(e)}")
             logging.info("Retrying in 30 seconds...")
-            asyncio.sleep(30)  # Wait before retrying
+            time.sleep(30)  # Wait before retrying
 
 if __name__ == '__main__':
     # Start the Flask app in a separate thread
