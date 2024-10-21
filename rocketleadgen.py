@@ -7,6 +7,7 @@ import pandas as pd
 from threading import Thread
 import time
 import os
+from datetime import datetime
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -102,16 +103,63 @@ async def send_lead(channel):
     else:
         logging.error(f"Could not find channel with ID: {DISCORD_CHANNEL_ID}")
 
-@tasks.loop(minutes=10)  # Change interval to 10 minutes
+@tasks.loop(minutes=10)  # Loop interval set to 10 minutes
 async def send_lead_from_csv():
-    logging.info("Attempting to send a warm lead from the CSV...")
-    channel = bot.get_channel(DISCORD_CHANNEL_ID)
-    await send_lead(channel)
+    """
+    Sends a lead from the CSV file if the current time is between 8 AM and 6 PM.
+    """
+    # Get the current time
+    current_hour = datetime.now().hour
+
+    # Only send leads between 8 AM and 6 PM
+    if 8 <= current_hour < 18:
+        logging.info("Attempting to send a warm lead from the CSV...")
+        channel = bot.get_channel(DISCORD_CHANNEL_ID)
+        await send_lead(channel)
+    else:
+        logging.info("Current time is outside of sending hours (8 AM - 6 PM). Skipping this cycle.")
 
 @app.route('/wix-webhook', methods=['POST'])
 def handle_wix_webhook():
-    # Existing code for handling Wix webhook
-    pass
+    """
+    Handles incoming webhook requests from Wix.
+    """
+    try:
+        # Get the JSON data sent from Wix
+        data = request.json
+        logging.info(f"Received data from Wix: {data}")
+
+        # Extract relevant fields from the form submission
+        name = data.get('name', 'N/A')
+        phone = data.get('phone', 'N/A')
+        gender = data.get('gender', 'N/A')
+        age = data.get('age', 'N/A')
+        zip_code = data.get('zip_code', 'N/A')
+
+        # Prepare the message content
+        embed = discord.Embed(title="Hot Lead", color=0xff0000)  # Hot lead color
+        embed.add_field(name="Name", value=name, inline=True)
+        embed.add_field(name="Phone Number", value=phone, inline=True)
+        embed.add_field(name="Gender", value=gender, inline=True)
+        embed.add_field(name="Age", value=age, inline=True)
+        embed.add_field(name="Zip Code", value=zip_code, inline=True)
+        embed.set_footer(text="Happy selling!")
+
+        # Send the message to the Discord channel
+        channel = bot.get_channel(DISCORD_CHANNEL_ID)
+        if channel:
+            asyncio.run_coroutine_threadsafe(channel.send(embed=embed), bot.loop)
+            logging.info(f"Sent hot lead to Discord: {name}")
+        else:
+            logging.error(f"Could not find channel with ID: {DISCORD_CHANNEL_ID}")
+
+        # Return a success response
+        return jsonify({"status": "success", "message": "Lead sent to Discord"}), 200
+
+    except Exception as e:
+        logging.error(f"Error processing the Wix webhook: {str(e)}")
+        # Return an error response
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @bot.event
 async def on_ready():
