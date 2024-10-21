@@ -31,12 +31,33 @@ current_lead_index = 0
 
 def read_leads_from_csv(file_path):
     """
-    Reads the leads from the given CSV file and filters the necessary columns.
+    Reads the leads from the given CSV file and filters the necessary columns,
+    combining 'FirstName' and 'LastName' into 'Name', and using 'Zip' for 'Zip Code'.
     """
     try:
+        # Load the CSV file into a DataFrame
         df = pd.read_csv(file_path)
-        required_columns = ['Name', 'Phone', 'Gender', 'Age', 'Zip Code']
-        df = df[required_columns]
+
+        # Print the columns of the CSV for debugging purposes
+        logging.info(f"Columns in the CSV file: {df.columns.tolist()}")
+
+        # Required columns
+        required_columns = ['FirstName', 'LastName', 'Phone', 'Gender', 'Age', 'Zip']
+
+        # Check if all required columns are in the DataFrame
+        if not all(column in df.columns for column in required_columns):
+            logging.error(f"Missing required columns in the CSV file. Expected columns: {required_columns}")
+            return None
+
+        # Combine 'FirstName' and 'LastName' into a single 'Name' column
+        df['Name'] = df['FirstName'] + ' ' + df['LastName']
+
+        # Rename 'Zip' to 'Zip Code' for consistency
+        df = df.rename(columns={'Zip': 'Zip Code'})
+
+        # Filter the DataFrame to only keep the relevant columns
+        df = df[['Name', 'Phone', 'Gender', 'Age', 'Zip Code']]
+
         logging.info(f"Successfully read {len(df)} leads from the CSV file.")
         return df
     except Exception as e:
@@ -44,6 +65,9 @@ def read_leads_from_csv(file_path):
         return None
 
 async def send_lead(channel):
+    """
+    Sends a lead from the CSV file to the specified Discord channel.
+    """
     global current_lead_index
     leads = read_leads_from_csv(CSV_FILE_PATH)
 
@@ -51,13 +75,17 @@ async def send_lead(channel):
         logging.warning("No leads found in the CSV file.")
         return
 
+    # Get the current lead
     lead = leads.iloc[current_lead_index]
+
+    # Extract the fields, handling missing values gracefully
     name = lead.get("Name", "N/A")
     phone_number = lead.get("Phone", "N/A")
     gender = lead.get("Gender", "N/A")
     age = lead.get("Age", "N/A")
     zip_code = lead.get("Zip Code", "N/A")
 
+    # Construct the embed for Discord
     embed = discord.Embed(title="Warm Lead", color=0x0000ff)
     embed.add_field(name="Name", value=name, inline=True)
     embed.add_field(name="Phone Number", value=phone_number, inline=True)
@@ -66,6 +94,7 @@ async def send_lead(channel):
     embed.add_field(name="Zip Code", value=zip_code, inline=True)
     embed.set_footer(text="Happy selling!")
 
+    # Send the embed to Discord
     if channel:
         await channel.send(embed=embed)
         logging.info(f"Sent warm lead to Discord: {name}")
@@ -112,7 +141,4 @@ def run_discord_bot():
 if __name__ == '__main__':
     flask_thread = Thread(target=run_flask_app)
     flask_thread.start()
-    run_discord_bot()
-
-    # Start the Discord bot in the main thread
     run_discord_bot()
