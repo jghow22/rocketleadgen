@@ -1,2 +1,4 @@
 Flask
 discord.py
+pandas
+openpyxl
