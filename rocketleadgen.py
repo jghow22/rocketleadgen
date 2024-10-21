@@ -8,6 +8,7 @@ import requests
 from io import StringIO
 from threading import Thread
 import time
+import os
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -21,6 +22,9 @@ DISCORD_CHANNEL_ID = 1281081570253475923  # Replace with the actual channel ID
 # URL of the CSV file in your GitHub repository
 CSV_FILE_URL = 'https://raw.githubusercontent.com/jghow22/rocketleadgen/main/leadslistseptwenty.csv'  # Update this with the correct URL
 
+# GitHub personal access token for private repository access, retrieved from environment variables
+GITHUB_TOKEN = os.getenv('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')  # Make sure to set this environment variable in Render
+
 # Initialize Flask app
 app = Flask(__name__)
 
@@ -32,12 +36,13 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # Global variable to keep track of the current lead index
 current_lead_index = 0
 
-def download_csv_from_github(url):
+def download_csv_from_github(url, token):
     """
-    Downloads the CSV file from the given GitHub URL and returns it as a DataFrame.
+    Downloads the CSV file from the given GitHub URL using a personal access token and returns it as a DataFrame.
     """
     try:
-        response = requests.get(url)
+        headers = {'Authorization': f'token {token}'}
+        response = requests.get(url, headers=headers)
         response.raise_for_status()  # Check for HTTP errors
 
         # Read the content of the downloaded CSV file into a DataFrame
@@ -53,7 +58,7 @@ async def send_lead(channel):
     Sends a lead from the CSV file to the specified Discord channel.
     """
     global current_lead_index
-    leads = download_csv_from_github(CSV_FILE_URL)
+    leads = download_csv_from_github(CSV_FILE_URL, GITHUB_TOKEN)
 
     if leads is None or leads.empty:
         logging.warning("No leads found in the CSV file.")
@@ -199,4 +204,3 @@ if __name__ == '__main__':
 
     # Start the Discord bot in the main thread
     run_discord_bot()
-
