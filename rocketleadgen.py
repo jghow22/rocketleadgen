@@ -18,7 +18,7 @@ DISCORD_TOKEN = 'MTI3OTkyOTE1OTEzNjU3NTUxOA.GgNms2.CFQewGJ7-7smOxcS6tmPwtOLCtZER
 DISCORD_CHANNEL_ID = 1281081570253475923  # Replace with the actual channel ID
 
 # Path to the local CSV file (update this to the relative path where the file is located)
-CSV_FILE_PATH = '/Users/James Howard/Desktop/leadslistseptwenty.csv'  # Update this with the actual path
+CSV_FILE_PATH = '/Users/JamesHoward/Desktop/leadslistseptwenty.csv'  # Update this with the actual path
 
 # Initialize Flask app
 app = Flask(__name__)
