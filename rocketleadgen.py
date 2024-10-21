@@ -129,12 +129,16 @@ def handle_wix_webhook():
         data = request.json
         logging.info(f"Received data from Wix: {data}")
 
-        # Extract relevant fields from the form submission
-        name = data.get('name', 'N/A')
-        phone = data.get('phone', 'N/A')
-        gender = data.get('gender', 'N/A')
-        age = data.get('age', 'N/A')
-        zip_code = data.get('zip_code', 'N/A')
+        # Extract relevant fields from the submissions list
+        submissions = data.get('data', {}).get('submissions', [])
+        submission_data = {item['label'].lower(): item['value'] for item in submissions}
+
+        # Extract fields from the parsed submission data and fallback values from the main data dictionary
+        name = submission_data.get('name', data.get('data', {}).get('field:first_name_379d', 'N/A'))
+        phone = submission_data.get('phone', data.get('data', {}).get('field:phone_23b2', 'N/A'))
+        gender = submission_data.get('gender', data.get('data', {}).get('field:gender', 'N/A'))
+        age = data.get('data', {}).get('field:age', 'N/A')  # Assuming 'Age' is directly in data
+        zip_code = data.get('data', {}).get('field:zip_code', 'N/A')  # Assuming 'Zip Code' is directly in data
 
         # Prepare the message content
         embed = discord.Embed(title="Hot Lead", color=0xff0000)  # Hot lead color
