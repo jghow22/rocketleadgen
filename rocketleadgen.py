@@ -199,5 +199,3 @@ if __name__ == '__main__':
 
     # Start the Discord bot in the main thread
     run_discord_bot()
-main thread
-    run_discord_bot()
