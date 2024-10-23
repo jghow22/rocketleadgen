@@ -8,6 +8,7 @@ from threading import Thread
 import time
 import os
 from datetime import datetime
+import pytz  # Importing pytz for time zone handling
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -18,6 +19,9 @@ DISCORD_CHANNEL_ID = int(os.getenv('DISCORD_CHANNEL_ID'))  # Discord channel ID
 
 # Path to the local CSV file
 CSV_FILE_PATH = 'leadslistseptwenty.csv'
+
+# Time zone for the scheduling (e.g., Eastern Time)
+TIME_ZONE = 'America/New_York'
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -108,8 +112,9 @@ async def send_lead_from_csv():
     """
     Sends a lead from the CSV file if the current time is between 8 AM and 6 PM.
     """
-    # Get the current time
-    current_hour = datetime.now().hour
+    # Get the current time in the specified time zone
+    current_time = datetime.now(pytz.timezone(TIME_ZONE))
+    current_hour = current_time.hour
 
     # Only send leads between 8 AM and 6 PM
     if 8 <= current_hour < 18:
