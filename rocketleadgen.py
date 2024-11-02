@@ -119,14 +119,18 @@ def read_leads_from_csv(file_path):
         logging.error(f"Error reading leads from CSV file: {str(e)}")
         return None
 
+# Initialize the current lead index
+current_lead_index = 0
+
 async def send_lead(channel):
+    global current_lead_index
     leads = read_leads_from_csv(CSV_FILE_PATH)
 
     if leads is None or leads.empty:
         logging.warning("No leads found in the CSV file.")
         return
 
-    global current_lead_index
+    # Get the current lead
     lead = leads.iloc[current_lead_index]
     name = lead.get("Name", "N/A")
     phone = lead.get("Phone", "N/A")
