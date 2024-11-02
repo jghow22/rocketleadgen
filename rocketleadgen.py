@@ -175,6 +175,7 @@ async def on_reaction_add(reaction, user):
 @app.route('/agent-dashboard', methods=['GET'])
 def get_lead_statuses():
     lead_data = fetch_all_lead_statuses_from_db()
+    print("Lead data retrieved:", lead_data)  # Add this for debugging
     return jsonify(lead_data)
 
 @app.route('/wix-webhook', methods=['POST'])
