@@ -55,6 +55,7 @@ def setup_database():
     ''')
     conn.commit()
     conn.close()
+    logging.info("Database setup completed.")
 
 setup_database()
 
@@ -67,6 +68,7 @@ def save_lead_to_db(name, phone, gender, age, zip_code):
     ''', (name, phone, gender, age, zip_code))
     conn.commit()
     conn.close()
+    logging.info(f"Lead saved to database: {name}, {phone}, {gender}, {age}, {zip_code}")
 
 def update_lead_status_in_db(lead_id, status):
     conn = sqlite3.connect(DB_PATH)
@@ -78,6 +80,7 @@ def update_lead_status_in_db(lead_id, status):
     ''', (status, lead_id))
     conn.commit()
     conn.close()
+    logging.info(f"Lead ID {lead_id} status updated to: {status}")
 
 def fetch_all_lead_statuses_from_db():
     conn = sqlite3.connect(DB_PATH)
@@ -85,6 +88,7 @@ def fetch_all_lead_statuses_from_db():
     cursor.execute('SELECT * FROM leads')
     rows = cursor.fetchall()
     conn.close()
+    logging.info("Rows fetched from database: %s", rows)  # Log the rows fetched from the database
     return [{'id': row[0], 'name': row[1], 'phone': row[2], 'gender': row[3], 'age': row[4], 'zip_code': row[5], 'status': row[6]} for row in rows]
 
 def read_leads_from_csv(file_path):
@@ -107,6 +111,7 @@ def read_leads_from_csv(file_path):
         return None
 
 async def scan_past_messages_for_reactions():
+    logging.info("Scanning past messages for reactions...")
     channel = bot.get_channel(DISCORD_CHANNEL_ID)
     if not channel:
         logging.error("Channel not found or bot lacks access.")
@@ -142,6 +147,7 @@ async def send_lead_from_csv():
 def get_lead_statuses():
     lead_data = fetch_all_lead_statuses_from_db()
     print("Lead data retrieved:", lead_data)
+    logging.info("Lead data returned by /agent-dashboard: %s", lead_data)  # Log the data being returned
     return jsonify(lead_data)
 
 @app.route('/wix-webhook', methods=['POST'])
