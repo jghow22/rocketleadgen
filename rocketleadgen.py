@@ -84,6 +84,41 @@ def fetch_all_lead_statuses_from_db():
     conn.close()
     return [{'id': row[0], 'name': row[1], 'phone': row[2], 'gender': row[3], 'age': row[4], 'zip_code': row[5], 'status': row[6]} for row in rows]
 
+def read_leads_from_csv(file_path):
+    """
+    Reads the leads from the given CSV file and filters the necessary columns,
+    combining 'FirstName' and 'LastName' into 'Name', and using 'Zip' for 'Zip Code'.
+    """
+    try:
+        # Load the CSV file into a DataFrame
+        df = pd.read_csv(file_path)
+
+        # Print the columns of the CSV for debugging purposes
+        logging.info(f"Columns in the CSV file: {df.columns.tolist()}")
+
+        # Required columns
+        required_columns = ['FirstName', 'LastName', 'Phone', 'Gender', 'Age', 'Zip']
+
+        # Check if all required columns are in the DataFrame
+        if not all(column in df.columns for column in required_columns):
+            logging.error(f"Missing required columns in the CSV file. Expected columns: {required_columns}")
+            return None
+
+        # Combine 'FirstName' and 'LastName' into a single 'Name' column
+        df['Name'] = df['FirstName'] + ' ' + df['LastName']
+
+        # Rename 'Zip' to 'Zip Code' for consistency
+        df = df.rename(columns={'Zip': 'Zip Code'})
+
+        # Filter the DataFrame to only keep the relevant columns
+        df = df[['Name', 'Phone', 'Gender', 'Age', 'Zip Code']]
+
+        logging.info(f"Successfully read {len(df)} leads from the CSV file.")
+        return df
+    except Exception as e:
+        logging.error(f"Error reading leads from CSV file: {str(e)}")
+        return None
+
 async def send_lead(channel):
     leads = read_leads_from_csv(CSV_FILE_PATH)
 
