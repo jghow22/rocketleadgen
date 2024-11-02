@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands, tasks
 from flask import Flask, request, jsonify
+from flask_cors import CORS  # Import CORS for cross-origin support
 import asyncio
 import logging
 import pandas as pd
@@ -26,6 +27,7 @@ TIME_ZONE = 'America/New_York'
 
 # Initialize Flask app
 app = Flask(__name__)
+CORS(app)  # Enable CORS for all routes
 
 # Create an instance of a Discord bot with commands
 intents = discord.Intents.default()
