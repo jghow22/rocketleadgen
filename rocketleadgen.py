@@ -33,6 +33,7 @@ CORS(app)  # Enable CORS for all routes
 intents = discord.Intents.default()
 intents.message_content = True
 intents.reactions = True  # Enable reactions intent
+intents.messages = True  # Enable access to message history
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # Database setup
@@ -87,95 +88,60 @@ def fetch_all_lead_statuses_from_db():
     return [{'id': row[0], 'name': row[1], 'phone': row[2], 'gender': row[3], 'age': row[4], 'zip_code': row[5], 'status': row[6]} for row in rows]
 
 def read_leads_from_csv(file_path):
-    """
-    Reads the leads from the given CSV file and filters the necessary columns,
-    combining 'FirstName' and 'LastName' into 'Name', and using 'Zip' for 'Zip Code'.
-    """
     try:
-        # Load the CSV file into a DataFrame
         df = pd.read_csv(file_path)
-
-        # Print the columns of the CSV for debugging purposes
         logging.info(f"Columns in the CSV file: {df.columns.tolist()}")
 
-        # Required columns
         required_columns = ['FirstName', 'LastName', 'Phone', 'Gender', 'Age', 'Zip']
-
-        # Check if all required columns are in the DataFrame
         if not all(column in df.columns for column in required_columns):
             logging.error(f"Missing required columns in the CSV file. Expected columns: {required_columns}")
             return None
 
-        # Combine 'FirstName' and 'LastName' into a single 'Name' column
         df['Name'] = df['FirstName'] + ' ' + df['LastName']
-
-        # Rename 'Zip' to 'Zip Code' for consistency
         df = df.rename(columns={'Zip': 'Zip Code'})
-
-        # Filter the DataFrame to only keep the relevant columns
         df = df[['Name', 'Phone', 'Gender', 'Age', 'Zip Code']]
-
         logging.info(f"Successfully read {len(df)} leads from the CSV file.")
         return df
     except Exception as e:
         logging.error(f"Error reading leads from CSV file: {str(e)}")
         return None
 
-# Initialize the current lead index
-current_lead_index = 0
-
-async def send_lead(channel):
-    global current_lead_index
-    leads = read_leads_from_csv(CSV_FILE_PATH)
-
-    if leads is None or leads.empty:
-        logging.warning("No leads found in the CSV file.")
+async def scan_past_messages_for_reactions():
+    channel = bot.get_channel(DISCORD_CHANNEL_ID)
+    if not channel:
+        logging.error("Channel not found or bot lacks access.")
         return
 
-    # Get the current lead
-    lead = leads.iloc[current_lead_index]
-    name = lead.get("Name", "N/A")
-    phone = lead.get("Phone", "N/A")
-    gender = lead.get("Gender", "N/A")
-    age = lead.get("Age", "N/A")
-    zip_code = lead.get("Zip Code", "N/A")
-
-    save_lead_to_db(name, phone, gender, age, zip_code)
-
-    embed = discord.Embed(title="Warm Lead", color=0x0000ff)
-    embed.add_field(name="Name", value=name, inline=True)
-    embed.add_field(name="Phone Number", value=phone, inline=True)
-    embed.add_field(name="Gender", value=gender, inline=True)
-    embed.add_field(name="Age", value=age, inline=True)
-    embed.add_field(name="Zip Code", value=zip_code, inline=True)
-    embed.set_footer(text="Happy selling!")
-
-    if channel:
-        await channel.send(embed=embed)
-        logging.info(f"Sent warm lead to Discord: {name}")
-        current_lead_index = (current_lead_index + 1) % len(leads)
+    async for message in channel.history(limit=None):
+        for reaction in message.reactions:
+            async for user in reaction.users():
+                if user != bot.user:  # Ignore the bot's own reactions
+                    if str(reaction.emoji) == "🔥":
+                        update_lead_status_in_db(message.id, "sold/booked")
+                    elif str(reaction.emoji) == "📵":
+                        update_lead_status_in_db(message.id, "do-not-call")
+                    elif str(reaction.emoji) == "✅":
+                        update_lead_status_in_db(message.id, "called")
 
 @bot.event
-async def on_reaction_add(reaction, user):
-    if user == bot.user:
-        return
+async def on_ready():
+    logging.info(f'Logged in as {bot.user} (ID: {bot.user.id})')
+    logging.info('Bot is online and ready.')
+    await scan_past_messages_for_reactions()  # Scan past messages on startup
+    send_lead_from_csv.start()
 
-    status_map = {
-        "🔥": "sold/booked",
-        "📵": "do-not-call",
-        "✅": "called"
-    }
-
-    if str(reaction.emoji) in status_map:
-        lead_id = extract_lead_id_from_message(reaction.message)  # Implement extraction logic
-        new_status = status_map[str(reaction.emoji)]
-        update_lead_status_in_db(lead_id, new_status)
-        logging.info(f"Updated lead {lead_id} to status: {new_status}")
+@tasks.loop(minutes=10)
+async def send_lead_from_csv():
+    current_time = datetime.now(pytz.timezone(TIME_ZONE))
+    current_hour = current_time.hour
+    if 8 <= current_hour < 18:
+        channel = bot.get_channel(DISCORD_CHANNEL_ID)
+        await send_lead(channel)
 
 @app.route('/agent-dashboard', methods=['GET'])
 def get_lead_statuses():
     lead_data = fetch_all_lead_statuses_from_db()
-    print("Lead data retrieved:", lead_data)  # Add this for debugging
+    print("Lead data retrieved:", lead_data)
     return jsonify(lead_data)
 
 @app.route('/wix-webhook', methods=['POST'])
@@ -212,21 +178,6 @@ def handle_wix_webhook():
     except Exception as e:
         logging.error(f"Error processing the Wix webhook: {str(e)}")
         return jsonify({"status": "error", "message": str(e)}), 500
-
-@bot.event
-async def on_ready():
-    logging.info(f'Logged in as {bot.user} (ID: {bot.user.id})')
-    logging.info('Bot is online and ready.')
-    send_lead_from_csv.start()
-
-@tasks.loop(minutes=10)
-async def send_lead_from_csv():
-    current_time = datetime.now(pytz.timezone(TIME_ZONE))
-    current_hour = current_time.hour
-
-    if 8 <= current_hour < 18:
-        channel = bot.get_channel(DISCORD_CHANNEL_ID)
-        await send_lead(channel)
 
 def run_flask_app():
     app.run(host='0.0.0.0', port=10000)
