@@ -76,6 +76,26 @@ def setup_database():
 
 setup_database()
 
+def read_leads_from_csv(file_path):
+    logging.debug(f"Reading leads from CSV file at: {file_path}")
+    try:
+        df = pd.read_csv(file_path)
+        logging.info(f"Columns in the CSV file: {df.columns.tolist()}")
+
+        required_columns = ['FirstName', 'LastName', 'Phone', 'Gender', 'Age', 'Zip']
+        if not all(column in df.columns for column in required_columns):
+            logging.error(f"Missing required columns in the CSV file. Expected columns: {required_columns}")
+            return None
+
+        df['Name'] = df['FirstName'] + ' ' + df['LastName']
+        df = df.rename(columns={'Zip': 'Zip Code'})
+        df = df[['Name', 'Phone', 'Gender', 'Age', 'Zip Code']]
+        logging.info(f"Successfully read {len(df)} leads from the CSV file.")
+        return df
+    except Exception as e:
+        logging.error(f"Error reading leads from CSV file: {str(e)}")
+        return None
+
 def save_lead_to_db(name, phone, gender, age, zip_code):
     logging.debug(f"Saving lead to DB: {name}, {phone}, {gender}, {age}, {zip_code}")
     try:
