@@ -15,6 +15,14 @@ import pytz
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 
+# Print the current working directory and path to leads.db
+print("Current working directory:", os.getcwd())
+db_path = os.path.abspath('leads.db')
+if os.path.exists('leads.db'):
+    print("Database path:", db_path)
+else:
+    print("leads.db not found in the current directory. Expected path:", db_path)
+
 # Retrieve sensitive information from environment variables
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 DISCORD_CHANNEL_ID = int(os.getenv('DISCORD_CHANNEL_ID'))
@@ -88,7 +96,11 @@ def fetch_all_lead_statuses_from_db():
     cursor.execute('SELECT * FROM leads')
     rows = cursor.fetchall()
     conn.close()
-    logging.info("Rows fetched from database: %s", rows)  # Log the rows fetched from the database
+    logging.info("Number of rows fetched: %d", len(rows))
+    if rows:
+        logging.info("Rows fetched from database: %s", rows)
+    else:
+        logging.warning("No rows fetched from the database. The table may be empty.")
     return [{'id': row[0], 'name': row[1], 'phone': row[2], 'gender': row[3], 'age': row[4], 'zip_code': row[5], 'status': row[6]} for row in rows]
 
 def read_leads_from_csv(file_path):
@@ -147,7 +159,7 @@ async def send_lead_from_csv():
 def get_lead_statuses():
     lead_data = fetch_all_lead_statuses_from_db()
     print("Lead data retrieved:", lead_data)
-    logging.info("Lead data returned by /agent-dashboard: %s", lead_data)  # Log the data being returned
+    logging.info("Lead data returned by /agent-dashboard: %s", lead_data)
     return jsonify(lead_data)
 
 @app.route('/wix-webhook', methods=['POST'])
