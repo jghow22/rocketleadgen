@@ -48,22 +48,31 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 DB_PATH = 'leads.db'
 
 def setup_database():
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS leads (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT,
-            phone TEXT,
-            gender TEXT,
-            age TEXT,
-            zip_code TEXT,
-            status TEXT DEFAULT 'new'
-        )
-    ''')
-    conn.commit()
-    conn.close()
-    logging.info("Database setup completed.")
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS leads (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT,
+                phone TEXT,
+                gender TEXT,
+                age TEXT,
+                zip_code TEXT,
+                status TEXT DEFAULT 'new'
+            )
+        ''')
+        conn.commit()
+        conn.close()
+        logging.info("Database setup completed.")
+
+        # Check if the database file was created successfully
+        if os.path.exists(DB_PATH):
+            logging.info(f"Database created at path: {os.path.abspath(DB_PATH)}")
+        else:
+            logging.error("Failed to create the leads.db file.")
+    except Exception as e:
+        logging.error(f"Error during database setup: {str(e)}")
 
 setup_database()
 
