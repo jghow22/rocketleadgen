@@ -122,6 +122,35 @@ def read_leads_from_csv(file_path):
         logging.error(f"Error reading leads from CSV file: {str(e)}")
         return None
 
+async def send_lead(channel):
+    leads = read_leads_from_csv(CSV_FILE_PATH)
+    if leads is None or leads.empty:
+        logging.warning("No leads found in the CSV file.")
+        return
+
+    # Get a lead (for example, the first row)
+    lead = leads.iloc[0]  # Change logic as needed
+    name = lead.get("Name", "N/A")
+    phone_number = lead.get("Phone", "N/A")
+    gender = lead.get("Gender", "N/A")
+    age = lead.get("Age", "N/A")
+    zip_code = lead.get("Zip Code", "N/A")
+
+    # Create an embed message
+    embed = discord.Embed(title="New Lead", color=0x00ff00)
+    embed.add_field(name="Name", value=name, inline=True)
+    embed.add_field(name="Phone", value=phone_number, inline=True)
+    embed.add_field(name="Gender", value=gender, inline=True)
+    embed.add_field(name="Age", value=age, inline=True)
+    embed.add_field(name="Zip Code", value=zip_code, inline=True)
+    embed.set_footer(text="Happy selling!")
+
+    if channel:
+        await channel.send(embed=embed)
+        logging.info(f"Sent lead to Discord: {name}")
+    else:
+        logging.error("Channel not found.")
+
 async def scan_past_messages_for_reactions():
     logging.info("Scanning past messages for reactions...")
     channel = bot.get_channel(DISCORD_CHANNEL_ID)
