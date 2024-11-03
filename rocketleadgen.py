@@ -67,10 +67,22 @@ def setup_database():
         logging.info("Database setup completed.")
 
         # Check if the database file was created successfully
+        time.sleep(1)  # Wait for a short period to ensure file recognition
         if os.path.exists(DB_PATH):
-            logging.info(f"Database created at path: {os.path.abspath(DB_PATH)}")
+            logging.info(f"Verified database path after delay: {os.path.abspath(DB_PATH)}")
         else:
-            logging.error("Failed to create the leads.db file.")
+            logging.error("Database path not found after creation delay.")
+        
+        # Test accessing the database with a simple query
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+            cursor.execute('SELECT name FROM sqlite_master WHERE type="table"')
+            tables = cursor.fetchall()
+            logging.info(f"Tables in database: {tables}")
+            conn.close()
+        except Exception as e:
+            logging.error(f"Error accessing the database after creation: {str(e)}")
     except Exception as e:
         logging.error(f"Error during database setup: {str(e)}")
 
