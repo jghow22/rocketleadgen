@@ -1,152 +1,244 @@
 import discord
 from discord.ext import commands, tasks
 from flask import Flask, request, jsonify
+from flask_cors import CORS  # Import CORS for cross-origin support
 import asyncio
 import logging
 import pandas as pd
 from threading import Thread
+import sqlite3
 import time
 import os
 from datetime import datetime
-import pytz  # Importing pytz for time zone handling
+import pytz
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)  # Set to DEBUG for detailed logging
+
+# Database path
+DB_PATH = 'leads.db'
+
+# Print the current working directory and verify database path
+logging.debug(f"Current working directory: {os.getcwd()}")
+if os.path.exists(DB_PATH):
+    logging.debug(f"Database path verified: {os.path.abspath(DB_PATH)}")
+else:
+    logging.debug(f"Database path will be created or accessed at: {os.path.abspath(DB_PATH)}")
 
 # Retrieve sensitive information from environment variables
-DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')  # Discord bot token
-DISCORD_CHANNEL_ID = int(os.getenv('DISCORD_CHANNEL_ID'))  # Discord channel ID
+DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
+DISCORD_CHANNEL_ID = int(os.getenv('DISCORD_CHANNEL_ID'))
 
 # Path to the local CSV file
 CSV_FILE_PATH = 'leadslistseptwenty.csv'
 
-# Time zone for the scheduling (e.g., Eastern Time)
+# Time zone for scheduling
 TIME_ZONE = 'America/New_York'
 
 # Initialize Flask app
 app = Flask(__name__)
+CORS(app, resources={r"/*": {"origins": "*"}})  # Enable CORS for all origins (adjust for production)
 
 # Create an instance of a Discord bot with commands
 intents = discord.Intents.default()
-intents.message_content = True  # Enable the message content intent
+intents.message_content = True
+intents.reactions = True  # Enable reactions intent
+intents.messages = True  # Enable access to message history
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# Global variable to keep track of the current lead index
-current_lead_index = 0
+def setup_database():
+    logging.debug("Attempting to set up the database.")
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS leads (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT,
+                phone TEXT,
+                gender TEXT,
+                age TEXT,
+                zip_code TEXT,
+                status TEXT DEFAULT 'new'
+            )
+        ''')
+        conn.commit()
+        conn.close()
+        logging.info("Database setup completed.")
+    except Exception as e:
+        logging.error(f"Error during database setup: {str(e)}")
+
+    # Verify database existence
+    if os.path.exists(DB_PATH):
+        logging.info(f"Database verified at path: {os.path.abspath(DB_PATH)}")
+    else:
+        logging.error("Database file was not found after setup.")
+
+setup_database()
 
 def read_leads_from_csv(file_path):
-    """
-    Reads the leads from the given CSV file and filters the necessary columns,
-    combining 'FirstName' and 'LastName' into 'Name', and using 'Zip' for 'Zip Code'.
-    """
+    logging.debug(f"Reading leads from CSV file at: {file_path}")
     try:
-        # Load the CSV file into a DataFrame
         df = pd.read_csv(file_path)
-
-        # Print the columns of the CSV for debugging purposes
         logging.info(f"Columns in the CSV file: {df.columns.tolist()}")
 
-        # Required columns
         required_columns = ['FirstName', 'LastName', 'Phone', 'Gender', 'Age', 'Zip']
-
-        # Check if all required columns are in the DataFrame
         if not all(column in df.columns for column in required_columns):
             logging.error(f"Missing required columns in the CSV file. Expected columns: {required_columns}")
             return None
 
-        # Combine 'FirstName' and 'LastName' into a single 'Name' column
         df['Name'] = df['FirstName'] + ' ' + df['LastName']
-
-        # Rename 'Zip' to 'Zip Code' for consistency
         df = df.rename(columns={'Zip': 'Zip Code'})
-
-        # Filter the DataFrame to only keep the relevant columns
         df = df[['Name', 'Phone', 'Gender', 'Age', 'Zip Code']]
-
         logging.info(f"Successfully read {len(df)} leads from the CSV file.")
         return df
     except Exception as e:
         logging.error(f"Error reading leads from CSV file: {str(e)}")
         return None
 
-async def send_lead(channel):
-    """
-    Sends a lead from the CSV file to the specified Discord channel.
-    """
-    global current_lead_index
-    leads = read_leads_from_csv(CSV_FILE_PATH)
+def save_lead_to_db(name, phone, gender, age, zip_code):
+    logging.debug(f"Saving lead to DB: {name}, {phone}, {gender}, {age}, {zip_code}")
+    try:
+        conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO leads (name, phone, gender, age, zip_code)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (name, phone, gender, age, zip_code))
+        conn.commit()
+        conn.close()
+        logging.info(f"Lead saved to database: {name}")
+    except Exception as e:
+        logging.error(f"Error saving lead to database: {str(e)}")
 
+def update_lead_status_in_db(lead_id, status):
+    logging.debug(f"Updating lead status in DB. Lead ID: {lead_id}, New Status: {status}")
+    try:
+        conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE leads
+            SET status = ?
+            WHERE id = ?
+        ''', (status, lead_id))
+        conn.commit()
+        conn.close()
+        logging.info(f"Lead ID {lead_id} status updated to: {status}")
+    except Exception as e:
+        logging.error(f"Error updating lead status in database: {str(e)}")
+
+def fetch_all_lead_statuses_from_db():
+    logging.debug("Fetching all lead statuses from DB.")
+    try:
+        conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM leads')
+        rows = cursor.fetchall()
+        conn.close()
+        logging.debug(f"Fetched {len(rows)} rows from DB.")
+        return [{'id': row[0], 'name': row[1], 'phone': row[2], 'gender': row[3], 'age': row[4], 'zip_code': row[5], 'status': row[6]} for row in rows]
+    except Exception as e:
+        logging.error(f"Error fetching data from database: {str(e)}")
+        return []
+
+async def send_lead(channel):
+    logging.debug("Reading leads from CSV.")
+    leads = read_leads_from_csv(CSV_FILE_PATH)
     if leads is None or leads.empty:
         logging.warning("No leads found in the CSV file.")
         return
 
-    # Get the current lead
-    lead = leads.iloc[current_lead_index]
+    lead = leads.iloc[0]  # Change logic as needed for real usage
+    logging.debug(f"Preparing to send lead: {lead}")
 
-    # Extract the fields, handling missing values gracefully
-    name = lead.get("Name", "N/A")
-    phone_number = lead.get("Phone", "N/A")
-    gender = lead.get("Gender", "N/A")
-    age = lead.get("Age", "N/A")
-    zip_code = lead.get("Zip Code", "N/A")
-
-    # Construct the embed for Discord
-    embed = discord.Embed(title="Warm Lead", color=0x0000ff)
-    embed.add_field(name="Name", value=name, inline=True)
-    embed.add_field(name="Phone Number", value=phone_number, inline=True)
-    embed.add_field(name="Gender", value=gender, inline=True)
-    embed.add_field(name="Age", value=age, inline=True)
-    embed.add_field(name="Zip Code", value=zip_code, inline=True)
+    embed = discord.Embed(title="New Lead", color=0x00ff00)
+    embed.add_field(name="Name", value=lead.get("Name", "N/A"), inline=True)
+    embed.add_field(name="Phone", value=lead.get("Phone", "N/A"), inline=True)
+    embed.add_field(name="Gender", value=lead.get("Gender", "N/A"), inline=True)
+    embed.add_field(name="Age", value=lead.get("Age", "N/A"), inline=True)
+    embed.add_field(name="Zip Code", value=lead.get("Zip Code", "N/A"), inline=True)
     embed.set_footer(text="Happy selling!")
 
-    # Send the embed to Discord
     if channel:
         await channel.send(embed=embed)
-        logging.info(f"Sent warm lead to Discord: {name}")
-        current_lead_index = (current_lead_index + 1) % len(leads)
+        logging.info(f"Sent lead to Discord: {lead.get('Name', 'N/A')}")
     else:
-        logging.error(f"Could not find channel with ID: {DISCORD_CHANNEL_ID}")
+        logging.error("Channel not found.")
 
-@tasks.loop(minutes=10)  # Loop interval set to 10 minutes
+async def scan_past_messages_for_reactions():
+    logging.debug("Starting scan for past messages with reactions.")
+    channel = bot.get_channel(DISCORD_CHANNEL_ID)
+    if not channel:
+        logging.error("Channel not found or bot lacks access.")
+        return
+
+    try:
+        async for message in channel.history(limit=None):
+            for reaction in message.reactions:
+                async for user in reaction.users():
+                    if user != bot.user:  # Ignore the bot's own reactions
+                        logging.debug(f"Processing reaction: {reaction.emoji} by {user}")
+                        if str(reaction.emoji) == "🔥":
+                            update_lead_status_in_db(message.id, "sold/booked")
+                        elif str(reaction.emoji) == "📵":
+                            update_lead_status_in_db(message.id, "do-not-call")
+                        elif str(reaction.emoji) == "✅":
+                            update_lead_status_in_db(message.id, "called")
+    except Exception as e:
+        logging.error(f"Error scanning messages for reactions: {str(e)}")
+
+@bot.event
+async def on_ready():
+    logging.info(f'Logged in as {bot.user} (ID: {bot.user.id})')
+    logging.info('Bot is online and ready.')
+    await scan_past_messages_for_reactions()  # Scan past messages on startup
+    send_lead_from_csv.start()
+
+@tasks.loop(minutes=10)
 async def send_lead_from_csv():
-    """
-    Sends a lead from the CSV file if the current time is between 8 AM and 6 PM.
-    """
-    # Get the current time in the specified time zone
+    logging.debug("Checking if current time is within sending hours.")
     current_time = datetime.now(pytz.timezone(TIME_ZONE))
     current_hour = current_time.hour
-
-    # Only send leads between 8 AM and 6 PM
     if 8 <= current_hour < 18:
-        logging.info("Attempting to send a warm lead from the CSV...")
+        logging.info("Sending lead during business hours.")
         channel = bot.get_channel(DISCORD_CHANNEL_ID)
         await send_lead(channel)
     else:
-        logging.info("Current time is outside of sending hours (8 AM - 6 PM). Skipping this cycle.")
+        logging.info("Outside of business hours, not sending leads.")
+
+@app.route('/agent-dashboard', methods=['GET'])
+def get_lead_statuses():
+    logging.debug("Handling request to /agent-dashboard.")
+    try:
+        lead_data = fetch_all_lead_statuses_from_db()
+        if not lead_data:
+            logging.warning("No data found in the database.")
+        else:
+            logging.debug(f"Lead data: {lead_data}")
+        return jsonify(lead_data)
+    except Exception as e:
+        logging.error(f"Error handling /agent-dashboard request: {str(e)}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/wix-webhook', methods=['POST'])
 def handle_wix_webhook():
-    """
-    Handles incoming webhook requests from Wix.
-    """
+    logging.debug("Received webhook from Wix.")
     try:
-        # Get the JSON data sent from Wix
         data = request.json
-        logging.info(f"Received data from Wix: {data}")
+        logging.debug(f"Data received: {data}")
 
-        # Extract relevant fields from the submissions list
         submissions = data.get('data', {}).get('submissions', [])
         submission_data = {item['label'].lower(): item['value'] for item in submissions}
 
-        # Extract fields from the parsed submission data and fallback values from the main data dictionary
         name = submission_data.get('name', data.get('data', {}).get('field:first_name_379d', 'N/A'))
         phone = submission_data.get('phone', data.get('data', {}).get('field:phone_23b2', 'N/A'))
         gender = submission_data.get('gender', data.get('data', {}).get('field:gender', 'N/A'))
-        age = data.get('data', {}).get('field:age', 'N/A')  # Assuming 'Age' is directly in data
-        zip_code = data.get('data', {}).get('field:zip_code', 'N/A')  # Assuming 'Zip Code' is directly in data
+        age = data.get('data', {}).get('field:age', 'N/A')
+        zip_code = data.get('data', {}).get('field:zip_code', 'N/A')
 
-        # Prepare the message content
-        embed = discord.Embed(title="Hot Lead", color=0xff0000)  # Hot lead color
+        save_lead_to_db(name, phone, gender, age, zip_code)
+
+        embed = discord.Embed(title="Hot Lead", color=0xff0000)
         embed.add_field(name="Name", value=name, inline=True)
         embed.add_field(name="Phone Number", value=phone, inline=True)
         embed.add_field(name="Gender", value=gender, inline=True)
@@ -154,41 +246,24 @@ def handle_wix_webhook():
         embed.add_field(name="Zip Code", value=zip_code, inline=True)
         embed.set_footer(text="Happy selling!")
 
-        # Send the message to the Discord channel
         channel = bot.get_channel(DISCORD_CHANNEL_ID)
         if channel:
             asyncio.run_coroutine_threadsafe(channel.send(embed=embed), bot.loop)
             logging.info(f"Sent hot lead to Discord: {name}")
         else:
-            logging.error(f"Could not find channel with ID: {DISCORD_CHANNEL_ID}")
+            logging.error("Discord channel not found.")
 
-        # Return a success response
         return jsonify({"status": "success", "message": "Lead sent to Discord"}), 200
-
     except Exception as e:
-        logging.error(f"Error processing the Wix webhook: {str(e)}")
-        # Return an error response
+        logging.error(f"Error processing Wix webhook: {str(e)}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
-@bot.event
-async def on_ready():
-    logging.info(f'Logged in as {bot.user} (ID: {bot.user.id})')
-    logging.info('Bot is online and ready.')
-    logging.info('------')
-    channel = bot.get_channel(DISCORD_CHANNEL_ID)
-    if channel:
-        bot.loop.create_task(send_lead(channel))
-    # Start the task for sending leads from the CSV file every 10 minutes
-    send_lead_from_csv.start()
-
-@bot.event
-async def on_disconnect():
-    logging.warning('Bot disconnected! Attempting to reconnect...')
-
 def run_flask_app():
+    logging.debug("Starting Flask app.")
     app.run(host='0.0.0.0', port=10000)
 
 def run_discord_bot():
+    logging.debug("Starting Discord bot.")
     while True:
         try:
             bot.run(DISCORD_TOKEN)
