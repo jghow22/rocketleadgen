@@ -84,6 +84,23 @@ def fetch_all_lead_statuses_from_db():
         logging.error(f"Error fetching data from database: {str(e)}")
         return []
 
+def display_database_contents():
+    """Temporary function to display the current contents of the database for verification."""
+    logging.debug("Displaying current contents of the database.")
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM leads')
+        rows = cursor.fetchall()
+        conn.close()
+        if rows:
+            for row in rows:
+                logging.info(f"Row: {row}")
+        else:
+            logging.warning("Database is still empty.")
+    except Exception as e:
+        logging.error(f"Error displaying database contents: {str(e)}")
+
 @app.route('/agent-dashboard', methods=['GET'])
 def get_lead_statuses():
     lead_data = fetch_all_lead_statuses_from_db()
@@ -114,6 +131,9 @@ def handle_wix_webhook():
         
         # Call function to save the lead
         save_lead_to_db(name, phone, gender, age, zip_code)
+
+        # Display the current contents of the database for verification
+        display_database_contents()
 
         return jsonify({"status": "success", "message": "Lead saved to database"}), 200
     except Exception as e:
