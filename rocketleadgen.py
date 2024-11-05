@@ -244,7 +244,7 @@ def handle_wix_webhook():
     logging.debug("Received webhook from Wix.")
     try:
         data = request.json
-        logging.debug(f"Data received: {data}")
+        logging.debug(f"Data received from Wix: {data}")
 
         submissions = data.get('data', {}).get('submissions', [])
         submission_data = {item['label'].lower(): item['value'] for item in submissions}
@@ -255,6 +255,10 @@ def handle_wix_webhook():
         age = data.get('data', {}).get('field:age', 'N/A')
         zip_code = data.get('data', {}).get('field:zip_code', 'N/A')
 
+        # Check and log data before insertion
+        logging.debug(f"Extracted data for insertion: Name={name}, Phone={phone}, Gender={gender}, Age={age}, Zip={zip_code}")
+        
+        # Call function to save the lead
         save_lead_to_db(name, phone, gender, age, zip_code)
 
         embed = discord.Embed(title="Hot Lead", color=0xff0000)
