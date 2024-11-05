@@ -76,6 +76,24 @@ def setup_database():
 
 setup_database()
 
+def check_database_contents():
+    """Checks and logs the current contents of the database."""
+    logging.debug("Checking current contents of the database.")
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM leads')
+        rows = cursor.fetchall()
+        conn.close()
+        if rows:
+            logging.info(f"Database contains {len(rows)} rows: {rows}")
+        else:
+            logging.warning("Database is empty.")
+    except Exception as e:
+        logging.error(f"Error checking database contents: {str(e)}")
+
+check_database_contents()
+
 def read_leads_from_csv(file_path):
     logging.debug(f"Reading leads from CSV file at: {file_path}")
     try:
@@ -97,7 +115,7 @@ def read_leads_from_csv(file_path):
         return None
 
 def save_lead_to_db(name, phone, gender, age, zip_code):
-    logging.debug(f"Saving lead to DB: {name}, {phone}, {gender}, {age}, {zip_code}")
+    logging.debug(f"Attempting to save lead: {name}, {phone}, {gender}, {age}, {zip_code}")
     try:
         conn = sqlite3.connect(DB_PATH, check_same_thread=False)
         cursor = conn.cursor()
@@ -106,8 +124,9 @@ def save_lead_to_db(name, phone, gender, age, zip_code):
             VALUES (?, ?, ?, ?, ?)
         ''', (name, phone, gender, age, zip_code))
         conn.commit()
+        inserted_id = cursor.lastrowid
         conn.close()
-        logging.info(f"Lead saved to database: {name}")
+        logging.info(f"Lead saved to database with ID {inserted_id}: {name}")
     except Exception as e:
         logging.error(f"Error saving lead to database: {str(e)}")
 
