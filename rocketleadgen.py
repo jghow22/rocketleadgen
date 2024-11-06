@@ -25,7 +25,7 @@ TIME_ZONE = 'America/New_York'
 
 # Initialize Flask app
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
+CORS(app, resources={r"/*": {"origins": "*"}})  # Allow all origins for now; restrict to Wix domain if needed
 
 # Create a Discord bot instance
 intents = discord.Intents.default()
@@ -99,16 +99,19 @@ async def scan_past_messages():
 
 @app.route('/agent-dashboard', methods=['GET'])
 def get_lead_statuses():
+    logging.debug("Handling request to /agent-dashboard.")
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
     cursor.execute('SELECT * FROM leads')
     rows = cursor.fetchall()
     conn.close()
     lead_data = [{'id': row[0], 'name': row[2], 'phone': row[3], 'gender': row[4], 'age': row[5], 'zip_code': row[6], 'status': row[7]} for row in rows]
+    
     if not lead_data:
         logging.warning("No data found in the database.")
     else:
-        logging.debug(f"Lead data fetched: {lead_data}")
+        logging.debug(f"Lead data to return: {lead_data}")
+    
     return jsonify(lead_data)
 
 @bot.event
