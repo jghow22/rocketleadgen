@@ -25,7 +25,8 @@ TIME_ZONE = 'America/New_York'
 
 # Initialize Flask app
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})  # Allow all origins for now; restrict to Wix domain if needed
+# Restrict CORS to allow requests only from your Wix site
+CORS(app, resources={r"/*": {"origins": "https://your-wix-site-domain.com"}})  # Replace with your actual Wix domain
 
 # Create a Discord bot instance
 intents = discord.Intents.default()
