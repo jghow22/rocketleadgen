@@ -7,8 +7,6 @@ import sqlite3
 import os
 from threading import Thread
 import asyncio
-from datetime import datetime
-import pytz
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -19,9 +17,6 @@ DB_PATH = 'leads.db'
 # Retrieve sensitive information from environment variables
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 DISCORD_CHANNEL_ID = int(os.getenv('DISCORD_CHANNEL_ID'))
-
-# Time zone for scheduling
-TIME_ZONE = 'America/New_York'
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -99,21 +94,15 @@ async def scan_past_messages():
             save_or_update_lead(message.id, name, phone, gender, age, zip_code, status)
 
 @app.route('/agent-dashboard', methods=['GET'])
-def get_lead_statuses():
-    logging.debug("Handling request to /agent-dashboard.")
+def get_called_leads_count():
+    logging.debug("Handling request to /agent-dashboard for called leads count.")
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
-    cursor.execute('SELECT * FROM leads')
-    rows = cursor.fetchall()
+    cursor.execute('SELECT COUNT(*) FROM leads WHERE status = "called"')
+    count = cursor.fetchone()[0]
     conn.close()
-    lead_data = [{'id': row[0], 'name': row[2], 'phone': row[3], 'gender': row[4], 'age': row[5], 'zip_code': row[6], 'status': row[7]} for row in rows]
-    
-    if not lead_data:
-        logging.warning("No data found in the database.")
-    else:
-        logging.debug(f"Lead data to return: {lead_data}")
-    
-    return jsonify(lead_data)
+    logging.debug(f"Number of called leads: {count}")
+    return jsonify({"called_leads_count": count})
 
 @bot.event
 async def on_ready():
