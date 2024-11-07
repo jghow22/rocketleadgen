@@ -94,15 +94,23 @@ async def scan_past_messages():
             save_or_update_lead(message.id, name, phone, gender, age, zip_code, status)
 
 @app.route('/agent-dashboard', methods=['GET'])
-def get_called_leads_count():
-    logging.debug("Handling request to /agent-dashboard for called leads count.")
+def get_lead_counts():
+    logging.debug("Handling request to /agent-dashboard for lead counts.")
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
+    
+    # Count for leads with status "called"
     cursor.execute('SELECT COUNT(*) FROM leads WHERE status = "called"')
-    count = cursor.fetchone()[0]
+    called_count = cursor.fetchone()[0]
+    
+    # Count for leads with status "sold/booked"
+    cursor.execute('SELECT COUNT(*) FROM leads WHERE status = "sold/booked"')
+    sold_count = cursor.fetchone()[0]
+    
     conn.close()
-    logging.debug(f"Number of called leads: {count}")
-    return jsonify({"called_leads_count": count})
+    
+    logging.debug(f"Number of called leads: {called_count}, Number of sold leads: {sold_count}")
+    return jsonify({"called_leads_count": called_count, "sold_leads_count": sold_count})
 
 @bot.event
 async def on_ready():
