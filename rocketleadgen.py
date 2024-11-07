@@ -43,24 +43,34 @@ def setup_database():
             gender TEXT,
             age INTEGER,
             zip_code TEXT,
+            state TEXT,
             status TEXT DEFAULT 'new'
         )
     ''')
+    conn.commit()
+    
+    # Add the 'state' column if it doesn't already exist
+    cursor.execute("PRAGMA table_info(leads)")
+    columns = [info[1] for info in cursor.fetchall()]
+    if 'state' not in columns:
+        cursor.execute('ALTER TABLE leads ADD COLUMN state TEXT')
+        logging.info("Added 'state' column to 'leads' table.")
+    
     conn.commit()
     conn.close()
     logging.info("Database setup completed.")
 
 setup_database()
 
-def save_or_update_lead(discord_message_id, name, phone, gender, age, zip_code, status):
+def save_or_update_lead(discord_message_id, name, phone, gender, age, zip_code, state, status):
     logging.debug(f"Saving or updating lead in DB: ID={discord_message_id}, Name={name}, Status={status}")
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
     cursor.execute('''
-        INSERT INTO leads (discord_message_id, name, phone, gender, age, zip_code, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO leads (discord_message_id, name, phone, gender, age, zip_code, state, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(discord_message_id) DO UPDATE SET status=excluded.status
-    ''', (discord_message_id, name, phone, gender, age, zip_code, status))
+    ''', (discord_message_id, name, phone, gender, age, zip_code, state, status))
     conn.commit()
     conn.close()
     logging.info(f"Lead {name} saved or updated in database.")
@@ -79,6 +89,7 @@ async def scan_past_messages():
             gender = fields.get("gender", "N/A")
             age = fields.get("age", "N/A")
             zip_code = fields.get("zip code", "N/A")
+            state = fields.get("state", "N/A")  # Assuming 'state' field is in embed
 
             # Ensure age is an integer if possible
             age = int(age) if age.isdigit() else None
@@ -94,7 +105,7 @@ async def scan_past_messages():
                     status = "called"
 
             # Save or update the lead in the database
-            save_or_update_lead(message.id, name, phone, gender, age, zip_code, status)
+            save_or_update_lead(message.id, name, phone, gender, age, zip_code, state, status)
 
 @app.route('/agent-dashboard', methods=['GET'])
 def get_lead_counts():
@@ -126,7 +137,7 @@ def get_lead_counts():
     average_age = round(average_age, 2) if average_age is not None else 0
     
     # Find the most popular state
-    cursor.execute('SELECT zip_code, COUNT(*) as count FROM leads WHERE zip_code IS NOT NULL GROUP BY zip_code ORDER BY count DESC LIMIT 1')
+    cursor.execute('SELECT state, COUNT(*) as count FROM leads WHERE state IS NOT NULL GROUP BY state ORDER BY count DESC LIMIT 1')
     most_popular_state = cursor.fetchone()
     popular_state = most_popular_state[0] if most_popular_state else "N/A"
     
