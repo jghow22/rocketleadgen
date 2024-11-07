@@ -125,15 +125,21 @@ def get_lead_counts():
     average_age = cursor.fetchone()[0]
     average_age = round(average_age, 2) if average_age is not None else 0
     
+    # Find the most popular state
+    cursor.execute('SELECT zip_code, COUNT(*) as count FROM leads WHERE zip_code IS NOT NULL GROUP BY zip_code ORDER BY count DESC LIMIT 1')
+    most_popular_state = cursor.fetchone()
+    popular_state = most_popular_state[0] if most_popular_state else "N/A"
+    
     conn.close()
     
-    logging.debug(f"Number of called leads: {called_count}, Number of sold leads: {sold_count}, Total leads: {total_count}, Closed percentage: {closed_percentage:.2f}%, Average age: {average_age}")
+    logging.debug(f"Called leads: {called_count}, Sold leads: {sold_count}, Total leads: {total_count}, Closed percentage: {closed_percentage:.2f}%, Average age: {average_age}, Most popular state: {popular_state}")
     return jsonify({
         "called_leads_count": called_count,
         "sold_leads_count": sold_count,
         "total_leads_count": total_count,
         "closed_percentage": round(closed_percentage, 2),
-        "average_age": average_age
+        "average_age": average_age,
+        "popular_state": popular_state
     })
 
 @bot.event
