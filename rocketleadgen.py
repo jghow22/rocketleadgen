@@ -20,18 +20,22 @@ DISCORD_CHANNEL_ID = int(os.getenv('DISCORD_CHANNEL_ID'))
 
 # Initialize Flask app
 app = Flask(__name__)
-# Restrict CORS to allow requests only from your Wix site
 CORS(app, resources={r"/*": {"origins": "https://your-wix-site-domain.com"}})  # Replace with your actual Wix domain
 
 # Create a Discord bot instance
 intents = discord.Intents.default()
 intents.message_content = True
-intents.reactions = True  # Enable reactions intent to check reactions
+intents.reactions = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# Set up the database
+# Zip code to state mapping (extend as needed)
+ZIP_CODE_TO_STATE = {
+    '30301': 'GA', '90001': 'CA', '10001': 'NY',  # Example zip codes
+    # Add additional mappings here
+}
+
 def setup_database():
-    logging.debug("Attempting to set up the database.")
+    logging.debug("Setting up the database.")
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''
@@ -49,7 +53,7 @@ def setup_database():
     ''')
     conn.commit()
     
-    # Add the 'state' column if it doesn't already exist
+    # Ensure state column exists
     cursor.execute("PRAGMA table_info(leads)")
     columns = [info[1] for info in cursor.fetchall()]
     if 'state' not in columns:
@@ -62,8 +66,27 @@ def setup_database():
 
 setup_database()
 
-def save_or_update_lead(discord_message_id, name, phone, gender, age, zip_code, state, status):
-    logging.debug(f"Saving or updating lead in DB: ID={discord_message_id}, Name={name}, Status={status}")
+def zip_to_state(zip_code):
+    """Map zip code to state if possible."""
+    return ZIP_CODE_TO_STATE.get(zip_code[:5], "Unknown")
+
+def debug_print_database():
+    """Print all entries in the leads database for debugging."""
+    logging.debug("Printing all entries in the leads database.")
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM leads")
+    rows = cursor.fetchall()
+    for row in rows:
+        logging.debug(f"Lead entry: {row}")
+    if not rows:
+        logging.warning("No entries found in the leads database.")
+    conn.close()
+
+def save_or_update_lead(discord_message_id, name, phone, gender, age, zip_code, status):
+    # Map zip code to state before saving
+    state = zip_to_state(zip_code) if zip_code else "Unknown"
+    logging.debug(f"Saving/updating lead in DB: ID={discord_message_id}, Name={name}, State={state}, Status={status}")
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
     cursor.execute('''
@@ -73,28 +96,24 @@ def save_or_update_lead(discord_message_id, name, phone, gender, age, zip_code, 
     ''', (discord_message_id, name, phone, gender, age, zip_code, state, status))
     conn.commit()
     conn.close()
-    logging.info(f"Lead {name} saved or updated in database.")
+    logging.info(f"Lead {name} saved/updated in database.")
 
 async def scan_past_messages():
     logging.info("Scanning past messages in the Discord channel.")
     channel = bot.get_channel(DISCORD_CHANNEL_ID)
     async for message in channel.history(limit=None):
-        if message.embeds:  # Only process embedded messages with lead data
+        if message.embeds:
             embed = message.embeds[0]
             fields = {field.name.lower(): field.value for field in embed.fields}
-
-            # Extract lead information based on field names
+            
             name = fields.get("name", "N/A")
             phone = fields.get("phone number", "N/A")
             gender = fields.get("gender", "N/A")
             age = fields.get("age", "N/A")
             zip_code = fields.get("zip code", "N/A")
-            state = fields.get("state", "N/A")  # Assuming 'state' field is in embed
-
-            # Ensure age is an integer if possible
+            
             age = int(age) if age.isdigit() else None
-
-            # Determine lead status based on reactions
+            
             status = "new"
             for reaction in message.reactions:
                 if reaction.emoji == "🔥":
@@ -103,9 +122,8 @@ async def scan_past_messages():
                     status = "do-not-call"
                 elif reaction.emoji == "✅":
                     status = "called"
-
-            # Save or update the lead in the database
-            save_or_update_lead(message.id, name, phone, gender, age, zip_code, state, status)
+            
+            save_or_update_lead(message.id, name, phone, gender, age, zip_code, status)
 
 @app.route('/agent-dashboard', methods=['GET'])
 def get_lead_counts():
@@ -113,37 +131,28 @@ def get_lead_counts():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
     
-    # Count for leads with status "called"
     cursor.execute('SELECT COUNT(*) FROM leads WHERE status = "called"')
     called_count = cursor.fetchone()[0]
     
-    # Count for leads with status "sold/booked"
     cursor.execute('SELECT COUNT(*) FROM leads WHERE status = "sold/booked"')
     sold_count = cursor.fetchone()[0]
     
-    # Count for total leads
     cursor.execute('SELECT COUNT(*) FROM leads')
     total_count = cursor.fetchone()[0]
     
-    # Calculate the percentage of leads closed
-    if total_count > 0:
-        closed_percentage = (sold_count / total_count) * 100
-    else:
-        closed_percentage = 0
+    closed_percentage = (sold_count / total_count) * 100 if total_count > 0 else 0
     
-    # Calculate the average age of leads
     cursor.execute('SELECT AVG(age) FROM leads WHERE age IS NOT NULL')
     average_age = cursor.fetchone()[0]
     average_age = round(average_age, 2) if average_age is not None else 0
     
-    # Find the most popular state
     cursor.execute('SELECT state, COUNT(*) as count FROM leads WHERE state IS NOT NULL GROUP BY state ORDER BY count DESC LIMIT 1')
     most_popular_state = cursor.fetchone()
     popular_state = most_popular_state[0] if most_popular_state else "N/A"
     
     conn.close()
     
-    logging.debug(f"Called leads: {called_count}, Sold leads: {sold_count}, Total leads: {total_count}, Closed percentage: {closed_percentage:.2f}%, Average age: {average_age}, Most popular state: {popular_state}")
+    logging.debug(f"Metrics - Called: {called_count}, Sold: {sold_count}, Total: {total_count}, Closed %: {closed_percentage}, Avg Age: {average_age}, Popular State: {popular_state}")
     return jsonify({
         "called_leads_count": called_count,
         "sold_leads_count": sold_count,
@@ -157,7 +166,8 @@ def get_lead_counts():
 async def on_ready():
     logging.info(f'Logged in as {bot.user} (ID: {bot.user.id})')
     logging.info('Bot is online and ready.')
-    await scan_past_messages()  # Scan past messages on startup
+    await scan_past_messages()
+    debug_print_database()  # Print database entries for debugging on startup
 
 def run_flask_app():
     logging.debug("Starting Flask app.")
