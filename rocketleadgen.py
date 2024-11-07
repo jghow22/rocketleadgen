@@ -107,10 +107,18 @@ def get_lead_counts():
     cursor.execute('SELECT COUNT(*) FROM leads WHERE status = "sold/booked"')
     sold_count = cursor.fetchone()[0]
     
+    # Count for total leads
+    cursor.execute('SELECT COUNT(*) FROM leads')
+    total_count = cursor.fetchone()[0]
+    
     conn.close()
     
-    logging.debug(f"Number of called leads: {called_count}, Number of sold leads: {sold_count}")
-    return jsonify({"called_leads_count": called_count, "sold_leads_count": sold_count})
+    logging.debug(f"Number of called leads: {called_count}, Number of sold leads: {sold_count}, Total leads: {total_count}")
+    return jsonify({
+        "called_leads_count": called_count,
+        "sold_leads_count": sold_count,
+        "total_leads_count": total_count
+    })
 
 @bot.event
 async def on_ready():
