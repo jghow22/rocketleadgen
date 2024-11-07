@@ -41,7 +41,7 @@ def setup_database():
             name TEXT,
             phone TEXT,
             gender TEXT,
-            age TEXT,
+            age INTEGER,
             zip_code TEXT,
             status TEXT DEFAULT 'new'
         )
@@ -80,6 +80,9 @@ async def scan_past_messages():
             age = fields.get("age", "N/A")
             zip_code = fields.get("zip code", "N/A")
 
+            # Ensure age is an integer if possible
+            age = int(age) if age.isdigit() else None
+
             # Determine lead status based on reactions
             status = "new"
             for reaction in message.reactions:
@@ -117,14 +120,20 @@ def get_lead_counts():
     else:
         closed_percentage = 0
     
+    # Calculate the average age of leads
+    cursor.execute('SELECT AVG(age) FROM leads WHERE age IS NOT NULL')
+    average_age = cursor.fetchone()[0]
+    average_age = round(average_age, 2) if average_age is not None else 0
+    
     conn.close()
     
-    logging.debug(f"Number of called leads: {called_count}, Number of sold leads: {sold_count}, Total leads: {total_count}, Closed percentage: {closed_percentage:.2f}%")
+    logging.debug(f"Number of called leads: {called_count}, Number of sold leads: {sold_count}, Total leads: {total_count}, Closed percentage: {closed_percentage:.2f}%, Average age: {average_age}")
     return jsonify({
         "called_leads_count": called_count,
         "sold_leads_count": sold_count,
         "total_leads_count": total_count,
-        "closed_percentage": round(closed_percentage, 2)  # Rounded to two decimal places
+        "closed_percentage": round(closed_percentage, 2),
+        "average_age": average_age
     })
 
 @bot.event
