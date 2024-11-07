@@ -111,13 +111,20 @@ def get_lead_counts():
     cursor.execute('SELECT COUNT(*) FROM leads')
     total_count = cursor.fetchone()[0]
     
+    # Calculate the percentage of leads closed
+    if total_count > 0:
+        closed_percentage = (sold_count / total_count) * 100
+    else:
+        closed_percentage = 0
+    
     conn.close()
     
-    logging.debug(f"Number of called leads: {called_count}, Number of sold leads: {sold_count}, Total leads: {total_count}")
+    logging.debug(f"Number of called leads: {called_count}, Number of sold leads: {sold_count}, Total leads: {total_count}, Closed percentage: {closed_percentage:.2f}%")
     return jsonify({
         "called_leads_count": called_count,
         "sold_leads_count": sold_count,
-        "total_leads_count": total_count
+        "total_leads_count": total_count,
+        "closed_percentage": round(closed_percentage, 2)  # Rounded to two decimal places
     })
 
 @bot.event
