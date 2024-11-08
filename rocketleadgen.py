@@ -28,10 +28,10 @@ intents.message_content = True
 intents.reactions = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# Zip code to state mapping (example codes)
+# Zip code to state mapping (example codes; expand as needed)
 ZIP_CODE_TO_STATE = {
-    '30301': 'GA', '90001': 'CA', '10001': 'NY',  # Example zip codes
-    # Add more mappings here as needed
+    '30301': 'GA', '90001': 'CA', '10001': 'NY',
+    '33101': 'FL', '60601': 'IL', '75201': 'TX'
 }
 
 def setup_database():
@@ -53,7 +53,6 @@ def setup_database():
     ''')
     conn.commit()
     
-    # Ensure state column exists
     cursor.execute("PRAGMA table_info(leads)")
     columns = [info[1] for info in cursor.fetchall()]
     if 'state' not in columns:
@@ -86,9 +85,11 @@ def debug_print_database():
     conn.close()
 
 def save_or_update_lead(discord_message_id, name, phone, gender, age, zip_code, status):
-    # Map zip code to state before saving
+    # Log zip code and state mapping
+    logging.debug(f"Saving lead - ID: {discord_message_id}, Name: {name}, Zip: {zip_code}")
     state = zip_to_state(zip_code) if zip_code else "Unknown"
-    logging.debug(f"Saving/updating lead in DB: ID={discord_message_id}, Name={name}, Zip Code={zip_code}, State={state}, Status={status}")
+    logging.debug(f"Derived state for zip code {zip_code}: {state}")
+    
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
     cursor.execute('''
@@ -98,7 +99,7 @@ def save_or_update_lead(discord_message_id, name, phone, gender, age, zip_code, 
     ''', (discord_message_id, name, phone, gender, age, zip_code, state, status))
     conn.commit()
     conn.close()
-    logging.info(f"Lead {name} saved/updated in database.")
+    logging.info(f"Lead {name} saved/updated in database with state: {state}")
 
 async def scan_past_messages():
     logging.info("Scanning past messages in the Discord channel.")
@@ -114,7 +115,7 @@ async def scan_past_messages():
             age = fields.get("age", "N/A")
             zip_code = fields.get("zip code", "N/A")
             
-            logging.debug(f"Retrieved zip code: {zip_code} for lead {name}")
+            logging.debug(f"Extracted zip code: {zip_code} for lead {name}")
             
             age = int(age) if age.isdigit() else None
             
