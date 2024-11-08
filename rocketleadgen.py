@@ -28,7 +28,7 @@ intents.message_content = True
 intents.reactions = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# Zip code to state mapping (example codes; expand as needed)
+# Simplified Zip code to state mapping
 ZIP_CODE_TO_STATE = {
     '30301': 'GA', '90001': 'CA', '10001': 'NY',
     '33101': 'FL', '60601': 'IL', '75201': 'TX'
@@ -67,8 +67,16 @@ setup_database()
 
 def zip_to_state(zip_code):
     """Map zip code to state if possible and log the result."""
+    if not zip_code or zip_code == "N/A":
+        logging.debug("Zip code is missing or 'N/A', defaulting state to 'Unknown'")
+        return "Unknown"
+    
+    # Map zip code to state and log the output
     state = ZIP_CODE_TO_STATE.get(zip_code[:5], "Unknown")
-    logging.debug(f"Mapping zip code {zip_code} to state: {state}")
+    if state == "Unknown":
+        logging.debug(f"Zip code {zip_code[:5]} not found in ZIP_CODE_TO_STATE dictionary.")
+    else:
+        logging.debug(f"Zip code {zip_code[:5]} mapped to state: {state}")
     return state
 
 def debug_print_database():
