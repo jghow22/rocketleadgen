@@ -28,10 +28,10 @@ intents.message_content = True
 intents.reactions = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# Zip code to state mapping (extend as needed)
+# Zip code to state mapping (example codes)
 ZIP_CODE_TO_STATE = {
     '30301': 'GA', '90001': 'CA', '10001': 'NY',  # Example zip codes
-    # Add additional mappings here
+    # Add more mappings here as needed
 }
 
 def setup_database():
@@ -67,8 +67,10 @@ def setup_database():
 setup_database()
 
 def zip_to_state(zip_code):
-    """Map zip code to state if possible."""
-    return ZIP_CODE_TO_STATE.get(zip_code[:5], "Unknown")
+    """Map zip code to state if possible and log the result."""
+    state = ZIP_CODE_TO_STATE.get(zip_code[:5], "Unknown")
+    logging.debug(f"Mapping zip code {zip_code} to state: {state}")
+    return state
 
 def debug_print_database():
     """Print all entries in the leads database for debugging."""
@@ -86,7 +88,7 @@ def debug_print_database():
 def save_or_update_lead(discord_message_id, name, phone, gender, age, zip_code, status):
     # Map zip code to state before saving
     state = zip_to_state(zip_code) if zip_code else "Unknown"
-    logging.debug(f"Saving/updating lead in DB: ID={discord_message_id}, Name={name}, State={state}, Status={status}")
+    logging.debug(f"Saving/updating lead in DB: ID={discord_message_id}, Name={name}, Zip Code={zip_code}, State={state}, Status={status}")
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
     cursor.execute('''
@@ -111,6 +113,8 @@ async def scan_past_messages():
             gender = fields.get("gender", "N/A")
             age = fields.get("age", "N/A")
             zip_code = fields.get("zip code", "N/A")
+            
+            logging.debug(f"Retrieved zip code: {zip_code} for lead {name}")
             
             age = int(age) if age.isdigit() else None
             
