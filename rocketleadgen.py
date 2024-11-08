@@ -5,6 +5,7 @@ from flask_cors import CORS
 import logging
 import sqlite3
 import os
+from datetime import datetime
 from threading import Thread
 import asyncio
 
@@ -40,7 +41,8 @@ def setup_database():
             gender TEXT,
             age INTEGER,
             zip_code TEXT,
-            status TEXT DEFAULT 'new'
+            status TEXT DEFAULT 'new',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
     conn.commit()
@@ -55,10 +57,10 @@ def save_or_update_lead(discord_message_id, name, phone, gender, age, zip_code, 
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
     cursor.execute('''
-        INSERT INTO leads (discord_message_id, name, phone, gender, age, zip_code, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO leads (discord_message_id, name, phone, gender, age, zip_code, status, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(discord_message_id) DO UPDATE SET status=excluded.status
-    ''', (discord_message_id, name, phone, gender, age, zip_code, status))
+    ''', (discord_message_id, name, phone, gender, age, zip_code, status, datetime.now()))
     conn.commit()
     conn.close()
 
@@ -76,10 +78,7 @@ async def scan_past_messages():
             age = fields.get("age", "N/A")
             zip_code = fields.get("zip code", "N/A")
             
-            logging.info(f"Extracted zip code: {zip_code} for lead {name}")
-            
             age = int(age) if age.isdigit() else None
-            
             status = "new"
             for reaction in message.reactions:
                 if reaction.emoji == "🔥":
@@ -119,10 +118,27 @@ def get_lead_counts():
     cursor.execute('SELECT gender, COUNT(*) as count FROM leads WHERE gender IS NOT NULL GROUP BY gender ORDER BY count DESC LIMIT 1')
     most_popular_gender = cursor.fetchone()
     popular_gender = most_popular_gender[0] if most_popular_gender else "N/A"
+
+    # Calculate the 3-hour range with the highest lead counts
+    cursor.execute('''
+        SELECT strftime('%H', created_at) AS hour, COUNT(*) FROM leads
+        WHERE created_at IS NOT NULL
+        GROUP BY hour
+        ORDER BY COUNT(*) DESC
+    ''')
+    hours = cursor.fetchall()
+    
+    if hours:
+        hour_counts = [(int(hour[0]), count) for hour, count in hours]
+        hour_counts.sort(key=lambda x: x[1], reverse=True)
+        hottest_hour = hour_counts[0][0]
+        hottest_range = f"{hottest_hour:02d}:00 - {(hottest_hour + 3) % 24:02d}:00"
+    else:
+        hottest_range = "N/A"
     
     conn.close()
     
-    logging.info(f"Metrics - Called: {called_count}, Sold: {sold_count}, Total: {total_count}, Closed %: {closed_percentage}, Avg Age: {average_age}, Popular Zip: {popular_zip}, Popular Gender: {popular_gender}")
+    logging.info(f"Metrics - Called: {called_count}, Sold: {sold_count}, Total: {total_count}, Closed %: {closed_percentage}, Avg Age: {average_age}, Popular Zip: {popular_zip}, Popular Gender: {popular_gender}, Hottest Time: {hottest_range}")
     return jsonify({
         "called_leads_count": called_count,
         "sold_leads_count": sold_count,
@@ -130,7 +146,8 @@ def get_lead_counts():
         "closed_percentage": round(closed_percentage, 2),
         "average_age": average_age,
         "popular_zip": popular_zip,
-        "popular_gender": popular_gender
+        "popular_gender": popular_gender,
+        "hottest_time": hottest_range
     })
 
 @bot.event
