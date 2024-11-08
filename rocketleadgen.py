@@ -7,7 +7,6 @@ import sqlite3
 import os
 from threading import Thread
 import asyncio
-from uszipcode import SearchEngine  # Import uszipcode for comprehensive zip code lookup
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -29,9 +28,6 @@ intents.message_content = True
 intents.reactions = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# Initialize uszipcode search engine
-search = SearchEngine(simple_zipcode=True)
-
 def setup_database():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -44,7 +40,6 @@ def setup_database():
             gender TEXT,
             age INTEGER,
             zip_code TEXT,
-            state TEXT,
             status TEXT DEFAULT 'new'
         )
     ''')
@@ -52,9 +47,9 @@ def setup_database():
     
     cursor.execute("PRAGMA table_info(leads)")
     columns = [info[1] for info in cursor.fetchall()]
-    if 'state' not in columns:
-        cursor.execute('ALTER TABLE leads ADD COLUMN state TEXT')
-        logging.info("Added 'state' column to 'leads' table.")
+    if 'zip_code' not in columns:
+        cursor.execute('ALTER TABLE leads ADD COLUMN zip_code TEXT')
+        logging.info("Added 'zip_code' column to 'leads' table.")
     
     conn.commit()
     conn.close()
@@ -62,29 +57,16 @@ def setup_database():
 
 setup_database()
 
-def zip_to_state(zip_code):
-    """Map zip code to state using uszipcode library."""
-    if not zip_code or zip_code == "N/A":
-        logging.info("Zip code is missing or 'N/A', defaulting state to 'Unknown'")
-        return "Unknown"
-    
-    result = search.by_zipcode(zip_code)
-    state = result.state if result else "Unknown"
-    logging.info(f"Zip code {zip_code} mapped to state: {state}")
-    return state
-
 def save_or_update_lead(discord_message_id, name, phone, gender, age, zip_code, status):
-    # Log zip code and state mapping
-    state = zip_to_state(zip_code) if zip_code else "Unknown"
-    logging.info(f"Saving lead - ID: {discord_message_id}, Name: {name}, Zip: {zip_code}, State: {state}, Status: {status}")
+    logging.info(f"Saving lead - ID: {discord_message_id}, Name: {name}, Zip: {zip_code}, Status: {status}")
     
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
     cursor.execute('''
-        INSERT INTO leads (discord_message_id, name, phone, gender, age, zip_code, state, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO leads (discord_message_id, name, phone, gender, age, zip_code, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(discord_message_id) DO UPDATE SET status=excluded.status
-    ''', (discord_message_id, name, phone, gender, age, zip_code, state, status))
+    ''', (discord_message_id, name, phone, gender, age, zip_code, status))
     conn.commit()
     conn.close()
 
@@ -138,20 +120,20 @@ def get_lead_counts():
     average_age = cursor.fetchone()[0]
     average_age = round(average_age, 2) if average_age is not None else 0
     
-    cursor.execute('SELECT state, COUNT(*) as count FROM leads WHERE state IS NOT NULL GROUP BY state ORDER BY count DESC LIMIT 1')
-    most_popular_state = cursor.fetchone()
-    popular_state = most_popular_state[0] if most_popular_state else "N/A"
+    cursor.execute('SELECT zip_code, COUNT(*) as count FROM leads WHERE zip_code IS NOT NULL GROUP BY zip_code ORDER BY count DESC LIMIT 1')
+    most_popular_zip = cursor.fetchone()
+    popular_zip = most_popular_zip[0] if most_popular_zip else "N/A"
     
     conn.close()
     
-    logging.info(f"Metrics - Called: {called_count}, Sold: {sold_count}, Total: {total_count}, Closed %: {closed_percentage}, Avg Age: {average_age}, Popular State: {popular_state}")
+    logging.info(f"Metrics - Called: {called_count}, Sold: {sold_count}, Total: {total_count}, Closed %: {closed_percentage}, Avg Age: {average_age}, Popular Zip: {popular_zip}")
     return jsonify({
         "called_leads_count": called_count,
         "sold_leads_count": sold_count,
         "total_leads_count": total_count,
         "closed_percentage": round(closed_percentage, 2),
         "average_age": average_age,
-        "popular_state": popular_state
+        "popular_zip": popular_zip
     })
 
 @bot.event
