@@ -5,4 +5,3 @@ openpyxl
 requests
 pytz
 flask-cors
-uszipcode
