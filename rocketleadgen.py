@@ -8,8 +8,8 @@ import os
 from threading import Thread
 import asyncio
 
-# Configure logging
-logging.basicConfig(level=logging.DEBUG)
+# Configure logging to INFO level to reduce noise
+logging.basicConfig(level=logging.INFO)
 
 # Database path
 DB_PATH = 'leads.db'
@@ -35,7 +35,6 @@ ZIP_CODE_TO_STATE = {
 }
 
 def setup_database():
-    logging.debug("Setting up the database.")
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''
@@ -68,35 +67,21 @@ setup_database()
 def zip_to_state(zip_code):
     """Map zip code to state if possible and log the result."""
     if not zip_code or zip_code == "N/A":
-        logging.debug("Zip code is missing or 'N/A', defaulting state to 'Unknown'")
+        logging.info("Zip code is missing or 'N/A', defaulting state to 'Unknown'")
         return "Unknown"
     
     # Map zip code to state and log the output
     state = ZIP_CODE_TO_STATE.get(zip_code[:5], "Unknown")
     if state == "Unknown":
-        logging.debug(f"Zip code {zip_code[:5]} not found in ZIP_CODE_TO_STATE dictionary.")
+        logging.info(f"Zip code {zip_code[:5]} not found in ZIP_CODE_TO_STATE dictionary.")
     else:
-        logging.debug(f"Zip code {zip_code[:5]} mapped to state: {state}")
+        logging.info(f"Zip code {zip_code[:5]} mapped to state: {state}")
     return state
-
-def debug_print_database():
-    """Print all entries in the leads database for debugging."""
-    logging.debug("Printing all entries in the leads database.")
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM leads")
-    rows = cursor.fetchall()
-    for row in rows:
-        logging.debug(f"Lead entry: {row}")
-    if not rows:
-        logging.warning("No entries found in the leads database.")
-    conn.close()
 
 def save_or_update_lead(discord_message_id, name, phone, gender, age, zip_code, status):
     # Log zip code and state mapping
-    logging.debug(f"Saving lead - ID: {discord_message_id}, Name: {name}, Zip: {zip_code}")
     state = zip_to_state(zip_code) if zip_code else "Unknown"
-    logging.debug(f"Derived state for zip code {zip_code}: {state}")
+    logging.info(f"Saving lead - ID: {discord_message_id}, Name: {name}, Zip: {zip_code}, State: {state}, Status: {status}")
     
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
@@ -107,7 +92,6 @@ def save_or_update_lead(discord_message_id, name, phone, gender, age, zip_code, 
     ''', (discord_message_id, name, phone, gender, age, zip_code, state, status))
     conn.commit()
     conn.close()
-    logging.info(f"Lead {name} saved/updated in database with state: {state}")
 
 async def scan_past_messages():
     logging.info("Scanning past messages in the Discord channel.")
@@ -123,7 +107,7 @@ async def scan_past_messages():
             age = fields.get("age", "N/A")
             zip_code = fields.get("zip code", "N/A")
             
-            logging.debug(f"Extracted zip code: {zip_code} for lead {name}")
+            logging.info(f"Extracted zip code: {zip_code} for lead {name}")
             
             age = int(age) if age.isdigit() else None
             
@@ -140,7 +124,7 @@ async def scan_past_messages():
 
 @app.route('/agent-dashboard', methods=['GET'])
 def get_lead_counts():
-    logging.debug("Handling request to /agent-dashboard for lead counts.")
+    logging.info("Handling request to /agent-dashboard for lead counts.")
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
     
@@ -165,7 +149,7 @@ def get_lead_counts():
     
     conn.close()
     
-    logging.debug(f"Metrics - Called: {called_count}, Sold: {sold_count}, Total: {total_count}, Closed %: {closed_percentage}, Avg Age: {average_age}, Popular State: {popular_state}")
+    logging.info(f"Metrics - Called: {called_count}, Sold: {sold_count}, Total: {total_count}, Closed %: {closed_percentage}, Avg Age: {average_age}, Popular State: {popular_state}")
     return jsonify({
         "called_leads_count": called_count,
         "sold_leads_count": sold_count,
@@ -180,10 +164,9 @@ async def on_ready():
     logging.info(f'Logged in as {bot.user} (ID: {bot.user.id})')
     logging.info('Bot is online and ready.')
     await scan_past_messages()
-    debug_print_database()  # Print database entries for debugging on startup
 
 def run_flask_app():
-    logging.debug("Starting Flask app.")
+    logging.info("Starting Flask app.")
     app.run(host='0.0.0.0', port=10000)
 
 def run_discord_bot():
