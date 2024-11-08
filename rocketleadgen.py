@@ -44,14 +44,6 @@ def setup_database():
         )
     ''')
     conn.commit()
-    
-    cursor.execute("PRAGMA table_info(leads)")
-    columns = [info[1] for info in cursor.fetchall()]
-    if 'zip_code' not in columns:
-        cursor.execute('ALTER TABLE leads ADD COLUMN zip_code TEXT')
-        logging.info("Added 'zip_code' column to 'leads' table.")
-    
-    conn.commit()
     conn.close()
     logging.info("Database setup completed.")
 
@@ -124,16 +116,21 @@ def get_lead_counts():
     most_popular_zip = cursor.fetchone()
     popular_zip = most_popular_zip[0] if most_popular_zip else "N/A"
     
+    cursor.execute('SELECT gender, COUNT(*) as count FROM leads WHERE gender IS NOT NULL GROUP BY gender ORDER BY count DESC LIMIT 1')
+    most_popular_gender = cursor.fetchone()
+    popular_gender = most_popular_gender[0] if most_popular_gender else "N/A"
+    
     conn.close()
     
-    logging.info(f"Metrics - Called: {called_count}, Sold: {sold_count}, Total: {total_count}, Closed %: {closed_percentage}, Avg Age: {average_age}, Popular Zip: {popular_zip}")
+    logging.info(f"Metrics - Called: {called_count}, Sold: {sold_count}, Total: {total_count}, Closed %: {closed_percentage}, Avg Age: {average_age}, Popular Zip: {popular_zip}, Popular Gender: {popular_gender}")
     return jsonify({
         "called_leads_count": called_count,
         "sold_leads_count": sold_count,
         "total_leads_count": total_count,
         "closed_percentage": round(closed_percentage, 2),
         "average_age": average_age,
-        "popular_zip": popular_zip
+        "popular_zip": popular_zip,
+        "popular_gender": popular_gender
     })
 
 @bot.event
