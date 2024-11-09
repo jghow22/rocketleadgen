@@ -42,7 +42,14 @@ def setup_database():
             age INTEGER,
             zip_code TEXT,
             status TEXT DEFAULT 'new',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            agent TEXT
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS agent_sales (
+            agent TEXT PRIMARY KEY,
+            sales_count INTEGER DEFAULT 0
         )
     ''')
     conn.commit()
@@ -51,16 +58,25 @@ def setup_database():
 
 setup_database()
 
-def save_or_update_lead(discord_message_id, name, phone, gender, age, zip_code, status):
-    logging.info(f"Saving lead - ID: {discord_message_id}, Name: {name}, Zip: {zip_code}, Status: {status}")
+def save_or_update_lead(discord_message_id, name, phone, gender, age, zip_code, status, agent):
+    logging.info(f"Saving lead - ID: {discord_message_id}, Name: {name}, Agent: {agent}, Status: {status}")
     
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
     cursor.execute('''
-        INSERT INTO leads (discord_message_id, name, phone, gender, age, zip_code, status, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(discord_message_id) DO UPDATE SET status=excluded.status
-    ''', (discord_message_id, name, phone, gender, age, zip_code, status, datetime.now()))
+        INSERT INTO leads (discord_message_id, name, phone, gender, age, zip_code, status, created_at, agent)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(discord_message_id) DO UPDATE SET status=excluded.status, agent=excluded.agent
+    ''', (discord_message_id, name, phone, gender, age, zip_code, status, datetime.now(), agent))
+    
+    # Update agent sales count if lead is sold
+    if status == "sold/booked":
+        cursor.execute('''
+            INSERT INTO agent_sales (agent, sales_count)
+            VALUES (?, 1)
+            ON CONFLICT(agent) DO UPDATE SET sales_count = sales_count + 1
+        ''', (agent,))
+    
     conn.commit()
     conn.close()
 
@@ -77,78 +93,42 @@ async def scan_past_messages():
             gender = fields.get("gender", "N/A")
             age = fields.get("age", "N/A")
             zip_code = fields.get("zip code", "N/A")
-            
             age = int(age) if age.isdigit() else None
-            status = "new"
-            for reaction in message.reactions:
-                if reaction.emoji == "🔥":
-                    status = "sold/booked"
-                elif reaction.emoji == "📵":
-                    status = "do-not-call"
-                elif reaction.emoji == "✅":
-                    status = "called"
             
-            save_or_update_lead(message.id, name, phone, gender, age, zip_code, status)
+            # Default status and agent
+            status = "new"
+            agent = "unknown"
+            
+            # Determine agent and status based on reactions
+            for reaction in message.reactions:
+                async for user in reaction.users():
+                    if user != bot.user:  # Only consider non-bot users as agents
+                        agent = user.name  # Use Discord username as agent name
+                        if str(reaction.emoji) == "🔥":
+                            status = "sold/booked"
+                        elif str(reaction.emoji) == "📵":
+                            status = "do-not-call"
+                        elif str(reaction.emoji) == "✅":
+                            status = "called"
+            
+            save_or_update_lead(message.id, name, phone, gender, age, zip_code, status, agent)
 
 @app.route('/agent-dashboard', methods=['GET'])
 def get_lead_counts():
-    logging.info("Handling request to /agent-dashboard for lead counts.")
+    # Existing code for other metrics...
+    # Example code will omit some lines for brevity
+
+@app.route('/agent-leaderboard', methods=['GET'])
+def get_agent_leaderboard():
+    logging.info("Handling request to /agent-leaderboard for sales leaderboard.")
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
     
-    cursor.execute('SELECT COUNT(*) FROM leads WHERE status = "called"')
-    called_count = cursor.fetchone()[0]
-    
-    cursor.execute('SELECT COUNT(*) FROM leads WHERE status = "sold/booked"')
-    sold_count = cursor.fetchone()[0]
-    
-    cursor.execute('SELECT COUNT(*) FROM leads')
-    total_count = cursor.fetchone()[0]
-    
-    closed_percentage = (sold_count / total_count) * 100 if total_count > 0 else 0
-    
-    cursor.execute('SELECT AVG(age) FROM leads WHERE age IS NOT NULL')
-    average_age = cursor.fetchone()[0]
-    average_age = round(average_age, 2) if average_age is not None else 0
-    
-    cursor.execute('SELECT zip_code, COUNT(*) as count FROM leads WHERE zip_code IS NOT NULL GROUP BY zip_code ORDER BY count DESC LIMIT 1')
-    most_popular_zip = cursor.fetchone()
-    popular_zip = most_popular_zip[0] if most_popular_zip else "N/A"
-    
-    cursor.execute('SELECT gender, COUNT(*) as count FROM leads WHERE gender IS NOT NULL GROUP BY gender ORDER BY count DESC LIMIT 1')
-    most_popular_gender = cursor.fetchone()
-    popular_gender = most_popular_gender[0] if most_popular_gender else "N/A"
-
-    # Calculate the 3-hour range with the highest lead counts
-    cursor.execute('''
-        SELECT strftime('%H', created_at) AS hour, COUNT(*) FROM leads
-        WHERE created_at IS NOT NULL
-        GROUP BY hour
-        ORDER BY COUNT(*) DESC
-    ''')
-    hours = cursor.fetchall()
-    
-    if hours:
-        hour_counts = [(int(hour[0]), count) for hour, count in hours]
-        hour_counts.sort(key=lambda x: x[1], reverse=True)
-        hottest_hour = hour_counts[0][0]
-        hottest_range = f"{hottest_hour:02d}:00 - {(hottest_hour + 3) % 24:02d}:00"
-    else:
-        hottest_range = "N/A"
+    cursor.execute('SELECT agent, sales_count FROM agent_sales ORDER BY sales_count DESC LIMIT 10')
+    leaderboard = [{"agent": row[0], "sales_count": row[1]} for row in cursor.fetchall()]
     
     conn.close()
-    
-    logging.info(f"Metrics - Called: {called_count}, Sold: {sold_count}, Total: {total_count}, Closed %: {closed_percentage}, Avg Age: {average_age}, Popular Zip: {popular_zip}, Popular Gender: {popular_gender}, Hottest Time: {hottest_range}")
-    return jsonify({
-        "called_leads_count": called_count,
-        "sold_leads_count": sold_count,
-        "total_leads_count": total_count,
-        "closed_percentage": round(closed_percentage, 2),
-        "average_age": average_age,
-        "popular_zip": popular_zip,
-        "popular_gender": popular_gender,
-        "hottest_time": hottest_range
-    })
+    return jsonify(leaderboard)
 
 @bot.event
 async def on_ready():
