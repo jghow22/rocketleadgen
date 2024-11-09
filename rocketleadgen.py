@@ -27,7 +27,11 @@ CORS(app, resources={r"/*": {"origins": "https://your-wix-site-domain.com"}})  #
 intents = discord.Intents.default()
 intents.message_content = True
 intents.reactions = True
+intents.members = True  # Enable fetching of all members
 bot = commands.Bot(command_prefix="!", intents=intents)
+
+# Global variable to store all agent usernames from Discord
+discord_agents = []
 
 def setup_database():
     conn = sqlite3.connect(DB_PATH)
@@ -80,9 +84,19 @@ def save_or_update_lead(discord_message_id, name, phone, gender, age, zip_code, 
     conn.commit()
     conn.close()
 
+async def fetch_discord_agents():
+    """Fetches all Discord members and stores their usernames."""
+    logging.info("Fetching all agents (members) in the Discord server.")
+    channel = bot.get_channel(DISCORD_CHANNEL_ID)
+    guild = channel.guild
+    global discord_agents
+    discord_agents = [member.name for member in guild.members if not member.bot]
+    logging.info(f"Fetched {len(discord_agents)} agents from Discord.")
+
 async def scan_past_messages():
     logging.info("Scanning past messages in the Discord channel.")
     channel = bot.get_channel(DISCORD_CHANNEL_ID)
+    await fetch_discord_agents()  # Fetch all members and store in discord_agents
     async for message in channel.history(limit=None):
         if message.embeds:
             embed = message.embeds[0]
@@ -176,23 +190,22 @@ def get_agent_leaderboard():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
 
-    # Get all unique agents from the leads table
-    cursor.execute("SELECT DISTINCT agent FROM leads")
-    all_agents = {row[0]: 0 for row in cursor.fetchall()}  # Initialize each agent with zero sales
+    # Initialize leaderboard with all agents from Discord and zero sales
+    leaderboard = {agent: 0 for agent in discord_agents}
 
     # Get agents with sales counts from agent_sales table
     cursor.execute("SELECT agent, sales_count FROM agent_sales")
     sales_counts = cursor.fetchall()
 
-    # Update all_agents dictionary with actual sales counts
+    # Update leaderboard dictionary with actual sales counts
     for agent, count in sales_counts:
-        all_agents[agent] = count
+        leaderboard[agent] = count
 
-    # Convert all_agents dictionary to a sorted list by sales count
-    leaderboard = [{"agent": agent, "sales_count": count} for agent, count in sorted(all_agents.items(), key=lambda x: x[1], reverse=True)]
+    # Convert leaderboard dictionary to a sorted list by sales count
+    sorted_leaderboard = [{"agent": agent, "sales_count": count} for agent, count in sorted(leaderboard.items(), key=lambda x: x[1], reverse=True)]
     
     conn.close()
-    return jsonify(leaderboard)
+    return jsonify(sorted_leaderboard)
 
 @bot.event
 async def on_ready():
