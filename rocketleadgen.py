@@ -115,8 +115,18 @@ async def scan_past_messages():
 
 @app.route('/agent-dashboard', methods=['GET'])
 def get_lead_counts():
-    # Existing code for other metrics...
-    # Example code will omit some lines for brevity
+    # Placeholder for other metrics functionality
+    # This function should include logic for other metrics you want to display on Wix.
+    return jsonify({
+        "called_leads_count": 0,
+        "sold_leads_count": 0,
+        "total_leads_count": 0,
+        "closed_percentage": 0,
+        "average_age": 0,
+        "popular_zip": "N/A",
+        "popular_gender": "N/A",
+        "hottest_time": "N/A"
+    })
 
 @app.route('/agent-leaderboard', methods=['GET'])
 def get_agent_leaderboard():
