@@ -115,17 +115,59 @@ async def scan_past_messages():
 
 @app.route('/agent-dashboard', methods=['GET'])
 def get_lead_counts():
-    # Placeholder for other metrics functionality
-    # This function should include logic for other metrics you want to display on Wix.
+    logging.info("Handling request to /agent-dashboard for lead counts.")
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    cursor = conn.cursor()
+    
+    # Called leads count
+    cursor.execute("SELECT COUNT(*) FROM leads WHERE status = 'called'")
+    called_leads_count = cursor.fetchone()[0]
+    
+    # Sold leads count
+    cursor.execute("SELECT COUNT(*) FROM leads WHERE status = 'sold/booked'")
+    sold_leads_count = cursor.fetchone()[0]
+    
+    # Total leads count
+    cursor.execute("SELECT COUNT(*) FROM leads")
+    total_leads_count = cursor.fetchone()[0]
+    
+    # Closed percentage
+    closed_percentage = (sold_leads_count / total_leads_count * 100) if total_leads_count > 0 else 0
+    
+    # Average age
+    cursor.execute("SELECT AVG(age) FROM leads WHERE age IS NOT NULL")
+    average_age = cursor.fetchone()[0] or 0
+    
+    # Most popular zip code
+    cursor.execute("SELECT zip_code, COUNT(*) AS zip_count FROM leads GROUP BY zip_code ORDER BY zip_count DESC LIMIT 1")
+    popular_zip = cursor.fetchone()
+    popular_zip = popular_zip[0] if popular_zip else "N/A"
+    
+    # Most popular gender
+    cursor.execute("SELECT gender, COUNT(*) AS gender_count FROM leads GROUP BY gender ORDER BY gender_count DESC LIMIT 1")
+    popular_gender = cursor.fetchone()
+    popular_gender = popular_gender[0] if popular_gender else "N/A"
+    
+    # Hottest time of day (3-hour range with most leads)
+    cursor.execute("SELECT strftime('%H', created_at) AS hour, COUNT(*) FROM leads GROUP BY hour")
+    hours = cursor.fetchall()
+    hottest_time = "N/A"
+    if hours:
+        hour_counts = {int(hour): count for hour, count in hours}
+        hottest_time = max(hour_counts, key=hour_counts.get)
+        hottest_time = f"{hottest_time:02d}:00 - {hottest_time + 3:02d}:00"
+
+    conn.close()
+    
     return jsonify({
-        "called_leads_count": 0,
-        "sold_leads_count": 0,
-        "total_leads_count": 0,
-        "closed_percentage": 0,
-        "average_age": 0,
-        "popular_zip": "N/A",
-        "popular_gender": "N/A",
-        "hottest_time": "N/A"
+        "called_leads_count": called_leads_count,
+        "sold_leads_count": sold_leads_count,
+        "total_leads_count": total_leads_count,
+        "closed_percentage": round(closed_percentage, 2),
+        "average_age": round(average_age, 1),
+        "popular_zip": popular_zip,
+        "popular_gender": popular_gender,
+        "hottest_time": hottest_time
     })
 
 @app.route('/agent-leaderboard', methods=['GET'])
