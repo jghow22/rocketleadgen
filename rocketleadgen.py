@@ -175,9 +175,21 @@ def get_agent_leaderboard():
     logging.info("Handling request to /agent-leaderboard for sales leaderboard.")
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
-    
-    cursor.execute('SELECT agent, sales_count FROM agent_sales ORDER BY sales_count DESC LIMIT 10')
-    leaderboard = [{"agent": row[0], "sales_count": row[1]} for row in cursor.fetchall()]
+
+    # Get all unique agents from the leads table
+    cursor.execute("SELECT DISTINCT agent FROM leads")
+    all_agents = {row[0]: 0 for row in cursor.fetchall()}  # Initialize each agent with zero sales
+
+    # Get agents with sales counts from agent_sales table
+    cursor.execute("SELECT agent, sales_count FROM agent_sales")
+    sales_counts = cursor.fetchall()
+
+    # Update all_agents dictionary with actual sales counts
+    for agent, count in sales_counts:
+        all_agents[agent] = count
+
+    # Convert all_agents dictionary to a sorted list by sales count
+    leaderboard = [{"agent": agent, "sales_count": count} for agent, count in sorted(all_agents.items(), key=lambda x: x[1], reverse=True)]
     
     conn.close()
     return jsonify(leaderboard)
