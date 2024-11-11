@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands, tasks
 from flask import Flask, request, jsonify
-from flask_cors import CORS  # Import CORS for cross-origin support
+from flask_cors import CORS
 import asyncio
 import logging
 import pandas as pd
@@ -32,8 +32,8 @@ CORS(app)
 # Create an instance of a Discord bot with commands
 intents = discord.Intents.default()
 intents.message_content = True
-intents.reactions = True  # Enable reactions intent
-intents.messages = True  # Enable access to message history
+intents.reactions = True
+intents.messages = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 def setup_database():
@@ -74,7 +74,6 @@ def get_dashboard_metrics():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
 
-    # Calculate metrics
     cursor.execute("SELECT COUNT(*) FROM leads WHERE status = 'called'")
     called_leads_count = cursor.fetchone()[0]
 
@@ -84,7 +83,6 @@ def get_dashboard_metrics():
     cursor.execute("SELECT COUNT(*) FROM leads")
     total_leads_count = cursor.fetchone()[0]
 
-    # Count uncalled leads
     cursor.execute("SELECT COUNT(*) FROM leads WHERE status = 'new'")
     uncalled_leads_count = cursor.fetchone()[0]
 
@@ -105,7 +103,6 @@ def get_dashboard_metrics():
     hottest_time = cursor.fetchone()
     hottest_time = f"{int(hottest_time[0]):02d}:00 - {int(hottest_time[0])+2:02d}:59" if hottest_time else "Unknown"
 
-    # Log all calculated metrics for debugging
     logging.debug(f"Dashboard Metrics - Called: {called_leads_count}, Sold: {sold_leads_count}, Total: {total_leads_count}, Uncalled: {uncalled_leads_count}, Closed %: {closed_percentage}, Avg Age: {average_age}, Popular Zip: {popular_zip}, Popular Gender: {popular_gender}, Hottest Time: {hottest_time}")
 
     conn.close()
@@ -114,13 +111,41 @@ def get_dashboard_metrics():
         "called_leads_count": called_leads_count,
         "sold_leads_count": sold_leads_count,
         "total_leads_count": total_leads_count,
-        "uncalled_leads_count": uncalled_leads_count,  # New metric
+        "uncalled_leads_count": uncalled_leads_count,
         "closed_percentage": round(closed_percentage, 2),
         "average_age": int(average_age),
         "popular_zip": popular_zip,
         "popular_gender": popular_gender,
         "hottest_time": hottest_time
     })
+
+@app.route('/agent-leaderboard', methods=['GET'])
+def get_leaderboard():
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT DISTINCT name FROM leads WHERE name IS NOT NULL")
+    agents = [row[0] for row in cursor.fetchall()]
+
+    leaderboard_data = []
+    for agent in agents:
+        cursor.execute("SELECT COUNT(*) FROM leads WHERE name = ? AND status = 'sold/booked'", (agent,))
+        sales_count = cursor.fetchone()[0]
+
+        cursor.execute("SELECT COUNT(*) FROM leads WHERE name = ? AND status = 'called'", (agent,))
+        leads_called = cursor.fetchone()[0]
+
+        leaderboard_data.append({
+            "agent": agent,
+            "sales_count": sales_count,
+            "leads_called": leads_called
+        })
+
+    conn.close()
+
+    leaderboard_data.sort(key=lambda x: x["sales_count"], reverse=True)
+    logging.debug("Final sorted leaderboard data: " + str(leaderboard_data))
+    return jsonify(leaderboard_data)
 
 def run_flask_app():
     app.run(host='0.0.0.0', port=10000)
