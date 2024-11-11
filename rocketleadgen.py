@@ -191,7 +191,7 @@ def get_agent_leaderboard():
     cursor = conn.cursor()
 
     # Initialize leaderboard with all agents from Discord and zero sales
-    leaderboard = {agent: 0 for agent in discord_agents}
+    leaderboard = {agent: {"sales_count": 0, "leads_called": 0} for agent in discord_agents}
 
     # Get agents with sales counts from agent_sales table
     cursor.execute("SELECT agent, sales_count FROM agent_sales")
@@ -199,10 +199,19 @@ def get_agent_leaderboard():
 
     # Update leaderboard dictionary with actual sales counts
     for agent, count in sales_counts:
-        leaderboard[agent] = count
+        leaderboard[agent]["sales_count"] = count
+
+    # Count called leads for each agent
+    cursor.execute("SELECT agent, COUNT(*) FROM leads WHERE status = 'called' GROUP BY agent")
+    called_counts = cursor.fetchall()
+    for agent, count in called_counts:
+        leaderboard[agent]["leads_called"] = count
 
     # Convert leaderboard dictionary to a sorted list by sales count
-    sorted_leaderboard = [{"agent": agent, "sales_count": count} for agent, count in sorted(leaderboard.items(), key=lambda x: x[1], reverse=True)]
+    sorted_leaderboard = [
+        {"agent": agent, "sales_count": data["sales_count"], "leads_called": data["leads_called"]}
+        for agent, data in sorted(leaderboard.items(), key=lambda x: x[1]["sales_count"], reverse=True)
+    ]
     
     conn.close()
     return jsonify(sorted_leaderboard)
