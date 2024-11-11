@@ -53,7 +53,8 @@ def setup_database():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS agent_sales (
             agent TEXT PRIMARY KEY,
-            sales_count INTEGER DEFAULT 0
+            sales_count INTEGER DEFAULT 0,
+            leads_called INTEGER DEFAULT 0
         )
     ''')
     conn.commit()
@@ -73,12 +74,18 @@ def save_or_update_lead(discord_message_id, name, phone, gender, age, zip_code, 
         ON CONFLICT(discord_message_id) DO UPDATE SET status=excluded.status, agent=excluded.agent
     ''', (discord_message_id, name, phone, gender, age, zip_code, status, datetime.now(), agent))
     
-    # Update agent sales count if lead is sold
+    # Update agent sales count or leads called count based on lead status
     if status == "sold/booked":
         cursor.execute('''
-            INSERT INTO agent_sales (agent, sales_count)
-            VALUES (?, 1)
+            INSERT INTO agent_sales (agent, sales_count, leads_called)
+            VALUES (?, 1, 0)
             ON CONFLICT(agent) DO UPDATE SET sales_count = sales_count + 1
+        ''', (agent,))
+    elif status == "called":
+        cursor.execute('''
+            INSERT INTO agent_sales (agent, sales_count, leads_called)
+            VALUES (?, 0, 1)
+            ON CONFLICT(agent) DO UPDATE SET leads_called = leads_called + 1
         ''', (agent,))
     
     conn.commit()
@@ -145,10 +152,6 @@ def get_lead_counts():
     cursor.execute("SELECT COUNT(*) FROM leads")
     total_leads_count = cursor.fetchone()[0]
     
-    # Uncalled leads count (leads still marked as 'new')
-    cursor.execute("SELECT COUNT(*) FROM leads WHERE status = 'new'")
-    uncalled_leads_count = cursor.fetchone()[0]
-    
     # Closed percentage
     closed_percentage = (sold_leads_count / total_leads_count * 100) if total_leads_count > 0 else 0
     
@@ -181,7 +184,6 @@ def get_lead_counts():
         "called_leads_count": called_leads_count,
         "sold_leads_count": sold_leads_count,
         "total_leads_count": total_leads_count,
-        "uncalled_leads_count": uncalled_leads_count,  # New metric added
         "closed_percentage": round(closed_percentage, 2),
         "average_age": round(average_age, 1),
         "popular_zip": popular_zip,
@@ -195,19 +197,21 @@ def get_agent_leaderboard():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
 
-    # Initialize leaderboard with all agents from Discord and zero sales
-    leaderboard = {agent: 0 for agent in discord_agents}
+    # Initialize leaderboard with all agents from Discord and zero sales and called leads
+    leaderboard = {agent: {"sales_count": 0, "leads_called": 0} for agent in discord_agents}
 
     # Get agents with sales counts from agent_sales table
-    cursor.execute("SELECT agent, sales_count FROM agent_sales")
-    sales_counts = cursor.fetchall()
+    cursor.execute("SELECT agent, sales_count, leads_called FROM agent_sales")
+    sales_and_calls = cursor.fetchall()
 
-    # Update leaderboard dictionary with actual sales counts
-    for agent, count in sales_counts:
-        leaderboard[agent] = count
+    # Update leaderboard dictionary with actual sales counts and called leads
+    for agent, sales_count, leads_called in sales_and_calls:
+        leaderboard[agent]["sales_count"] = sales_count
+        leaderboard[agent]["leads_called"] = leads_called
 
     # Convert leaderboard dictionary to a sorted list by sales count
-    sorted_leaderboard = [{"agent": agent, "sales_count": count} for agent, count in sorted(leaderboard.items(), key=lambda x: x[1], reverse=True)]
+    sorted_leaderboard = [{"agent": agent, "sales_count": data["sales_count"], "leads_called": data["leads_called"]}
+                          for agent, data in sorted(leaderboard.items(), key=lambda x: x[1]["sales_count"], reverse=True)]
     
     conn.close()
     return jsonify(sorted_leaderboard)
