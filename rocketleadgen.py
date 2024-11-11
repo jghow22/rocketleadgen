@@ -46,6 +46,7 @@ def setup_database():
             age INTEGER,
             zip_code TEXT,
             status TEXT DEFAULT 'new',
+            lead_type TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             agent TEXT
         )
@@ -62,16 +63,16 @@ def setup_database():
 
 setup_database()
 
-def save_or_update_lead(discord_message_id, name, phone, gender, age, zip_code, status, agent):
-    logging.info(f"Saving lead - ID: {discord_message_id}, Name: {name}, Agent: {agent}, Status: {status}")
+def save_or_update_lead(discord_message_id, name, phone, gender, age, zip_code, status, agent, lead_type="warm"):
+    logging.info(f"Saving lead - ID: {discord_message_id}, Name: {name}, Agent: {agent}, Status: {status}, Type: {lead_type}")
     
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
     cursor.execute('''
-        INSERT INTO leads (discord_message_id, name, phone, gender, age, zip_code, status, created_at, agent)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO leads (discord_message_id, name, phone, gender, age, zip_code, status, created_at, agent, lead_type)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(discord_message_id) DO UPDATE SET status=excluded.status, agent=excluded.agent
-    ''', (discord_message_id, name, phone, gender, age, zip_code, status, datetime.now(), agent))
+    ''', (discord_message_id, name, phone, gender, age, zip_code, status, datetime.now(), agent, lead_type))
     
     # Update agent sales count if lead is sold
     if status == "sold/booked":
@@ -109,6 +110,9 @@ async def scan_past_messages():
             zip_code = fields.get("zip code", "N/A")
             age = int(age) if age.isdigit() else None
             
+            # Determine if lead is hot or warm
+            lead_type = "hot" if embed.title == "Hot Lead" else "warm"
+            
             # Default status and agent
             status = "new"
             agent = "unknown"
@@ -125,7 +129,7 @@ async def scan_past_messages():
                         elif str(reaction.emoji) == "✅":
                             status = "called"
             
-            save_or_update_lead(message.id, name, phone, gender, age, zip_code, status, agent)
+            save_or_update_lead(message.id, name, phone, gender, age, zip_code, status, agent, lead_type)
 
 @app.route('/agent-dashboard', methods=['GET'])
 def get_lead_counts():
@@ -148,6 +152,10 @@ def get_lead_counts():
     # Uncalled leads count
     cursor.execute("SELECT COUNT(*) FROM leads WHERE status = 'new'")
     uncalled_leads_count = cursor.fetchone()[0]
+
+    # Hot leads count
+    cursor.execute("SELECT COUNT(*) FROM leads WHERE lead_type = 'hot'")
+    hot_leads_count = cursor.fetchone()[0]
     
     # Closed percentage
     closed_percentage = (sold_leads_count / total_leads_count * 100) if total_leads_count > 0 else 0
@@ -175,9 +183,6 @@ def get_lead_counts():
         hottest_time = max(hour_counts, key=hour_counts.get)
         hottest_time = f"{hottest_time:02d}:00 - {hottest_time + 3:02d}:00"
 
-    # Agent count
-    agent_count = len(discord_agents)
-
     conn.close()
     
     return jsonify({
@@ -190,7 +195,7 @@ def get_lead_counts():
         "popular_zip": popular_zip,
         "popular_gender": popular_gender,
         "hottest_time": hottest_time,
-        "agent_count": agent_count  # New field for agent count
+        "hot_leads_count": hot_leads_count
     })
 
 @app.route('/agent-leaderboard', methods=['GET'])
@@ -205,12 +210,10 @@ def get_agent_leaderboard():
     # Get agents with sales counts from agent_sales table
     cursor.execute("SELECT agent, sales_count FROM agent_sales")
     sales_counts = cursor.fetchall()
-
-    # Update leaderboard dictionary with actual sales counts
     for agent, count in sales_counts:
         leaderboard[agent]["sales_count"] = count
 
-    # Count called leads for each agent
+    # Count the leads called by each agent
     cursor.execute("SELECT agent, COUNT(*) FROM leads WHERE status = 'called' GROUP BY agent")
     leads_called_counts = cursor.fetchall()
     for agent, count in leads_called_counts:
@@ -218,8 +221,7 @@ def get_agent_leaderboard():
             leaderboard[agent]["leads_called"] = count
 
     # Convert leaderboard dictionary to a sorted list by sales count
-    sorted_leaderboard = [{"agent": agent, "sales_count": data["sales_count"], "leads_called": data["leads_called"]}
-                          for agent, data in sorted(leaderboard.items(), key=lambda x: x[1]["sales_count"], reverse=True)]
+    sorted_leaderboard = [{"agent": agent, **data} for agent, data in sorted(leaderboard.items(), key=lambda x: x[1]["sales_count"], reverse=True)]
     
     conn.close()
     return jsonify(sorted_leaderboard)
