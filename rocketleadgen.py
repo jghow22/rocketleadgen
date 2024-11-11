@@ -135,6 +135,7 @@ def get_leaderboard():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
 
+    # Fetch all distinct agents who have leads
     cursor.execute("SELECT DISTINCT name FROM leads WHERE name IS NOT NULL")
     agents = [row[0] for row in cursor.fetchall()]
 
@@ -154,6 +155,7 @@ def get_leaderboard():
 
     conn.close()
 
+    # Sort by sales count in descending order
     leaderboard_data.sort(key=lambda x: x["sales_count"], reverse=True)
     logging.debug("Final sorted leaderboard data: " + str(leaderboard_data))
     return jsonify(leaderboard_data)
