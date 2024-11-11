@@ -53,8 +53,7 @@ def setup_database():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS agent_sales (
             agent TEXT PRIMARY KEY,
-            sales_count INTEGER DEFAULT 0,
-            leads_called INTEGER DEFAULT 0
+            sales_count INTEGER DEFAULT 0
         )
     ''')
     conn.commit()
@@ -74,18 +73,12 @@ def save_or_update_lead(discord_message_id, name, phone, gender, age, zip_code, 
         ON CONFLICT(discord_message_id) DO UPDATE SET status=excluded.status, agent=excluded.agent
     ''', (discord_message_id, name, phone, gender, age, zip_code, status, datetime.now(), agent))
     
-    # Update agent sales count or leads called count based on lead status
+    # Update agent sales count if lead is sold
     if status == "sold/booked":
         cursor.execute('''
-            INSERT INTO agent_sales (agent, sales_count, leads_called)
-            VALUES (?, 1, 0)
+            INSERT INTO agent_sales (agent, sales_count)
+            VALUES (?, 1)
             ON CONFLICT(agent) DO UPDATE SET sales_count = sales_count + 1
-        ''', (agent,))
-    elif status == "called":
-        cursor.execute('''
-            INSERT INTO agent_sales (agent, sales_count, leads_called)
-            VALUES (?, 0, 1)
-            ON CONFLICT(agent) DO UPDATE SET leads_called = leads_called + 1
         ''', (agent,))
     
     conn.commit()
@@ -152,8 +145,8 @@ def get_lead_counts():
     cursor.execute("SELECT COUNT(*) FROM leads")
     total_leads_count = cursor.fetchone()[0]
     
-    # Uncalled leads count (not called or sold/booked)
-    cursor.execute("SELECT COUNT(*) FROM leads WHERE status NOT IN ('called', 'sold/booked')")
+    # Uncalled leads count
+    cursor.execute("SELECT COUNT(*) FROM leads WHERE status = 'new'")
     uncalled_leads_count = cursor.fetchone()[0]
     
     # Closed percentage
@@ -182,6 +175,9 @@ def get_lead_counts():
         hottest_time = max(hour_counts, key=hour_counts.get)
         hottest_time = f"{hottest_time:02d}:00 - {hottest_time + 3:02d}:00"
 
+    # Agent count
+    agent_count = len(discord_agents)
+
     conn.close()
     
     return jsonify({
@@ -193,7 +189,8 @@ def get_lead_counts():
         "average_age": round(average_age, 1),
         "popular_zip": popular_zip,
         "popular_gender": popular_gender,
-        "hottest_time": hottest_time
+        "hottest_time": hottest_time,
+        "agent_count": agent_count  # New field for agent count
     })
 
 @app.route('/agent-leaderboard', methods=['GET'])
@@ -202,17 +199,23 @@ def get_agent_leaderboard():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
 
-    # Initialize leaderboard with all agents from Discord and zero sales and called leads
+    # Initialize leaderboard with all agents from Discord and zero sales
     leaderboard = {agent: {"sales_count": 0, "leads_called": 0} for agent in discord_agents}
 
     # Get agents with sales counts from agent_sales table
-    cursor.execute("SELECT agent, sales_count, leads_called FROM agent_sales")
-    sales_and_calls = cursor.fetchall()
+    cursor.execute("SELECT agent, sales_count FROM agent_sales")
+    sales_counts = cursor.fetchall()
 
-    # Update leaderboard dictionary with actual sales counts and called leads
-    for agent, sales_count, leads_called in sales_and_calls:
-        leaderboard[agent]["sales_count"] = sales_count
-        leaderboard[agent]["leads_called"] = leads_called
+    # Update leaderboard dictionary with actual sales counts
+    for agent, count in sales_counts:
+        leaderboard[agent]["sales_count"] = count
+
+    # Count called leads for each agent
+    cursor.execute("SELECT agent, COUNT(*) FROM leads WHERE status = 'called' GROUP BY agent")
+    leads_called_counts = cursor.fetchall()
+    for agent, count in leads_called_counts:
+        if agent in leaderboard:
+            leaderboard[agent]["leads_called"] = count
 
     # Convert leaderboard dictionary to a sorted list by sales count
     sorted_leaderboard = [{"agent": agent, "sales_count": data["sales_count"], "leads_called": data["leads_called"]}
