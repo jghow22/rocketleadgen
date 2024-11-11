@@ -152,6 +152,10 @@ def get_lead_counts():
     cursor.execute("SELECT COUNT(*) FROM leads")
     total_leads_count = cursor.fetchone()[0]
     
+    # Uncalled leads count (not called or sold/booked)
+    cursor.execute("SELECT COUNT(*) FROM leads WHERE status NOT IN ('called', 'sold/booked')")
+    uncalled_leads_count = cursor.fetchone()[0]
+    
     # Closed percentage
     closed_percentage = (sold_leads_count / total_leads_count * 100) if total_leads_count > 0 else 0
     
@@ -184,6 +188,7 @@ def get_lead_counts():
         "called_leads_count": called_leads_count,
         "sold_leads_count": sold_leads_count,
         "total_leads_count": total_leads_count,
+        "uncalled_leads_count": uncalled_leads_count,
         "closed_percentage": round(closed_percentage, 2),
         "average_age": round(average_age, 1),
         "popular_zip": popular_zip,
