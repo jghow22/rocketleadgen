@@ -127,27 +127,70 @@ async def scan_past_messages():
             
             save_or_update_lead(message.id, name, phone, gender, age, zip_code, status, agent)
 
+@app.route('/agent-dashboard', methods=['GET'])
+def get_dashboard_metrics():
+    logging.info("Handling request to /agent-dashboard for dashboard metrics.")
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    cursor = conn.cursor()
+
+    # Calculate metrics
+    cursor.execute("SELECT COUNT(*) FROM leads WHERE status = 'called'")
+    called_leads_count = cursor.fetchone()[0]
+
+    cursor.execute("SELECT COUNT(*) FROM leads WHERE status = 'sold/booked'")
+    sold_leads_count = cursor.fetchone()[0]
+
+    cursor.execute("SELECT COUNT(*) FROM leads")
+    total_leads_count = cursor.fetchone()[0]
+
+    closed_percentage = (sold_leads_count / total_leads_count * 100) if total_leads_count > 0 else 0.0
+
+    cursor.execute("SELECT AVG(age) FROM leads WHERE age IS NOT NULL")
+    average_age = cursor.fetchone()[0] or 0
+
+    cursor.execute("SELECT zip_code, COUNT(*) as count FROM leads GROUP BY zip_code ORDER BY count DESC LIMIT 1")
+    popular_zip = cursor.fetchone()
+    popular_zip = popular_zip[0] if popular_zip else "Unknown"
+
+    cursor.execute("SELECT gender, COUNT(*) as count FROM leads GROUP BY gender ORDER BY count DESC LIMIT 1")
+    popular_gender = cursor.fetchone()
+    popular_gender = popular_gender[0] if popular_gender else "Unknown"
+
+    cursor.execute("SELECT strftime('%H', created_at), COUNT(*) as count FROM leads GROUP BY strftime('%H', created_at) ORDER BY count DESC LIMIT 1")
+    hottest_time = cursor.fetchone()
+    hottest_time = f"{int(hottest_time[0]):02d}:00 - {int(hottest_time[0])+2:02d}:59" if hottest_time else "Unknown"
+
+    # Log all calculated metrics for debugging
+    logging.debug(f"Dashboard Metrics - Called: {called_leads_count}, Sold: {sold_leads_count}, Total: {total_leads_count}, Closed %: {closed_percentage}, Avg Age: {average_age}, Popular Zip: {popular_zip}, Popular Gender: {popular_gender}, Hottest Time: {hottest_time}")
+
+    conn.close()
+
+    return jsonify({
+        "called_leads_count": called_leads_count,
+        "sold_leads_count": sold_leads_count,
+        "total_leads_count": total_leads_count,
+        "closed_percentage": round(closed_percentage, 2),
+        "average_age": int(average_age),
+        "popular_zip": popular_zip,
+        "popular_gender": popular_gender,
+        "hottest_time": hottest_time
+    })
+
 @app.route('/agent-leaderboard', methods=['GET'])
 def get_agent_leaderboard():
     logging.info("Handling request to /agent-leaderboard for sales leaderboard.")
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
 
-    # Initialize leaderboard with all agents from Discord and zero sales
     leaderboard = {agent: {"sales_count": 0, "leads_called": 0} for agent in discord_agents}
-    logging.debug(f"Initial leaderboard (all agents with zero counts): {leaderboard}")
 
-    # Get agents with sales counts from agent_sales table
     cursor.execute("SELECT agent, sales_count FROM agent_sales")
     sales_counts = cursor.fetchall()
-
-    # Update leaderboard dictionary with actual sales counts
     for agent, count in sales_counts:
         if agent in leaderboard:
             leaderboard[agent]["sales_count"] = count
         logging.debug(f"Updated {agent}'s sales count to {count}")
 
-    # Count called leads for each agent
     cursor.execute("SELECT agent, COUNT(*) FROM leads WHERE status = 'called' GROUP BY agent")
     called_counts = cursor.fetchall()
     for agent, count in called_counts:
@@ -155,12 +198,10 @@ def get_agent_leaderboard():
             leaderboard[agent]["leads_called"] = count
         logging.debug(f"Updated {agent}'s leads called to {count}")
 
-    # Convert leaderboard dictionary to a sorted list by sales count
     sorted_leaderboard = [
         {"agent": agent, "sales_count": data["sales_count"], "leads_called": data["leads_called"]}
         for agent, data in sorted(leaderboard.items(), key=lambda x: x[1]["sales_count"], reverse=True)
     ]
-    
     logging.debug(f"Final sorted leaderboard data: {sorted_leaderboard}")
     conn.close()
     return jsonify(sorted_leaderboard)
