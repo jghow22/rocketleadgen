@@ -87,34 +87,41 @@ def get_dashboard_metrics():
 
     cursor.execute("SELECT COUNT(*) FROM leads WHERE status = 'called'")
     called_leads_count = cursor.fetchone()[0]
+    logging.debug(f"Called Leads Count: {called_leads_count}")
 
     cursor.execute("SELECT COUNT(*) FROM leads WHERE status = 'sold/booked'")
     sold_leads_count = cursor.fetchone()[0]
+    logging.debug(f"Sold Leads Count: {sold_leads_count}")
 
     cursor.execute("SELECT COUNT(*) FROM leads")
     total_leads_count = cursor.fetchone()[0]
+    logging.debug(f"Total Leads Count: {total_leads_count}")
 
     cursor.execute("SELECT COUNT(*) FROM leads WHERE status = 'new'")
     uncalled_leads_count = cursor.fetchone()[0]
+    logging.debug(f"Uncalled Leads Count: {uncalled_leads_count}")
 
     closed_percentage = (sold_leads_count / total_leads_count * 100) if total_leads_count > 0 else 0.0
+    logging.debug(f"Closed Percentage: {closed_percentage}")
 
     cursor.execute("SELECT AVG(age) FROM leads WHERE age IS NOT NULL")
     average_age = cursor.fetchone()[0] or 0
+    logging.debug(f"Average Age: {average_age}")
 
     cursor.execute("SELECT zip_code, COUNT(*) as count FROM leads GROUP BY zip_code ORDER BY count DESC LIMIT 1")
     popular_zip = cursor.fetchone()
     popular_zip = popular_zip[0] if popular_zip else "Unknown"
+    logging.debug(f"Popular Zip Code: {popular_zip}")
 
     cursor.execute("SELECT gender, COUNT(*) as count FROM leads GROUP BY gender ORDER BY count DESC LIMIT 1")
     popular_gender = cursor.fetchone()
     popular_gender = popular_gender[0] if popular_gender else "Unknown"
+    logging.debug(f"Popular Gender: {popular_gender}")
 
     cursor.execute("SELECT strftime('%H', created_at), COUNT(*) as count FROM leads GROUP BY strftime('%H', created_at) ORDER BY count DESC LIMIT 1")
     hottest_time = cursor.fetchone()
     hottest_time = f"{int(hottest_time[0]):02d}:00 - {int(hottest_time[0])+2:02d}:59" if hottest_time else "Unknown"
-
-    logging.debug(f"Dashboard Metrics - Called: {called_leads_count}, Sold: {sold_leads_count}, Total: {total_leads_count}, Uncalled: {uncalled_leads_count}, Closed %: {closed_percentage}, Avg Age: {average_age}, Popular Zip: {popular_zip}, Popular Gender: {popular_gender}, Hottest Time: {hottest_time}")
+    logging.debug(f"Hottest Time: {hottest_time}")
 
     conn.close()
 
@@ -132,6 +139,7 @@ def get_dashboard_metrics():
 
 @app.route('/agent-leaderboard', methods=['GET'])
 def get_leaderboard():
+    logging.info("Handling request to /agent-leaderboard for leaderboard data.")
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
 
@@ -143,7 +151,6 @@ def get_leaderboard():
     for agent in agents:
         cursor.execute("SELECT COUNT(*) FROM leads WHERE name = ? AND status = 'sold/booked'", (agent,))
         sales_count = cursor.fetchone()[0]
-
         cursor.execute("SELECT COUNT(*) FROM leads WHERE name = ? AND status = 'called'", (agent,))
         leads_called = cursor.fetchone()[0]
 
@@ -152,15 +159,14 @@ def get_leaderboard():
             "sales_count": sales_count,
             "leads_called": leads_called
         })
+        logging.debug(f"Agent: {agent}, Sales Count: {sales_count}, Leads Called: {leads_called}")
 
     conn.close()
 
-    # Sort by sales count in descending order
     leaderboard_data.sort(key=lambda x: x["sales_count"], reverse=True)
     logging.debug("Final sorted leaderboard data: " + str(leaderboard_data))
     return jsonify(leaderboard_data)
 
-# Temporary debug endpoint to verify database contents
 @app.route('/debug-database', methods=['GET'])
 def debug_database():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
