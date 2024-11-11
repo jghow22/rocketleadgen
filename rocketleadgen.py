@@ -55,28 +55,8 @@ def setup_database():
     conn.close()
     logging.info("Database setup completed.")
 
-def populate_test_data():
-    # Connect to the database and add sample data
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    test_data = [
-        ("Alice Johnson", "123-456-7890", "Female", 30, "30301", "called"),
-        ("Bob Smith", "098-765-4321", "Male", 25, "30302", "sold/booked"),
-        ("Charlie Brown", "555-123-4567", "Male", 40, "30303", "new"),
-        ("Diana Prince", "555-987-6543", "Female", 35, "30304", "called")
-    ]
-    for lead in test_data:
-        cursor.execute('''
-            INSERT INTO leads (name, phone, gender, age, zip_code, status)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', lead)
-    conn.commit()
-    conn.close()
-    logging.info("Test data populated in the database.")
-
-# Setup database and populate with test data temporarily
+# Setup database
 setup_database()
-populate_test_data()
 
 def save_lead_to_db(name, phone, gender, age, zip_code):
     conn = sqlite3.connect(DB_PATH)
