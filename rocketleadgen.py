@@ -59,15 +59,25 @@ def setup_database():
 setup_database()
 
 def save_lead_to_db(name, phone, gender, age, zip_code):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute('''
-        INSERT INTO leads (name, phone, gender, age, zip_code)
-        VALUES (?, ?, ?, ?, ?)
-    ''', (name, phone, gender, age, zip_code))
-    conn.commit()
-    conn.close()
-    logging.info(f"Lead saved to database: {name}")
+    logging.debug(f"Attempting to save lead: Name={name}, Phone={phone}, Gender={gender}, Age={age}, Zip Code={zip_code}")
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO leads (name, phone, gender, age, zip_code)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (name, phone, gender, age, zip_code))
+        conn.commit()
+        logging.info(f"Lead successfully saved to database: {name}")
+    except Exception as e:
+        logging.error(f"Error saving lead to database: {e}")
+    finally:
+        conn.close()
+
+# Temporary function to manually add a test lead
+def add_manual_test_lead():
+    logging.info("Adding a manual test lead to the database.")
+    save_lead_to_db("Test User", "555-5555", "Unknown", 30, "30301")
 
 @app.route('/agent-dashboard', methods=['GET'])
 def get_dashboard_metrics():
@@ -148,6 +158,22 @@ def get_leaderboard():
     logging.debug("Final sorted leaderboard data: " + str(leaderboard_data))
     return jsonify(leaderboard_data)
 
+# Temporary debug endpoint to verify database contents
+@app.route('/debug-database', methods=['GET'])
+def debug_database():
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM leads")
+    leads = cursor.fetchall()
+    conn.close()
+
+    formatted_leads = [
+        {"id": row[0], "name": row[1], "phone": row[2], "gender": row[3], "age": row[4], "zip_code": row[5], "status": row[6], "created_at": row[7]}
+        for row in leads
+    ]
+    logging.debug("Database contents: " + str(formatted_leads))
+    return jsonify(formatted_leads)
+
 def run_flask_app():
     app.run(host='0.0.0.0', port=10000)
 
@@ -155,6 +181,9 @@ def run_discord_bot():
     bot.run(DISCORD_TOKEN)
 
 if __name__ == '__main__':
+    # Call the test lead function once to verify database functionality
+    add_manual_test_lead()
+
     flask_thread = Thread(target=run_flask_app)
     flask_thread.start()
     run_discord_bot()
