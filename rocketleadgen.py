@@ -191,6 +191,7 @@ def get_agent_leaderboard():
             leaderboard[agent]["sales_count"] = count
         logging.debug(f"Updated {agent}'s sales count to {count}")
 
+    # Count called leads for each agent and log each update explicitly
     cursor.execute("SELECT agent, COUNT(*) FROM leads WHERE status = 'called' GROUP BY agent")
     called_counts = cursor.fetchall()
     for agent, count in called_counts:
