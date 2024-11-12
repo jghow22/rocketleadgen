@@ -200,6 +200,7 @@ def get_leaderboard_data():
             leaderboard[agent]["sales_count"] = count
 
     leaderboard_list = list(leaderboard.values())
+    logging.info(f"Returning leaderboard data: {leaderboard_list}")
     conn.close()
     return jsonify(leaderboard_list)
 
@@ -227,6 +228,7 @@ def get_weekly_leaderboard():
             leaderboard[agent]["sales_count"] = count
 
     leaderboard_list = list(leaderboard.values())
+    logging.info(f"Returning weekly leaderboard data: {leaderboard_list}")
     conn.close()
     return jsonify(leaderboard_list)
 
