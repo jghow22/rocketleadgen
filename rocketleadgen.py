@@ -21,7 +21,7 @@ DISCORD_CHANNEL_ID = int(os.getenv('DISCORD_CHANNEL_ID'))
 
 # Initialize Flask app
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "https://your-wix-site-domain.com"}})
+CORS(app, resources={r"/*": {"origins": "*"}})  # For testing, allow all origins
 
 # Create a Discord bot instance
 intents = discord.Intents.default()
@@ -85,7 +85,6 @@ def save_or_update_lead(discord_message_id, name, phone, gender, age, zip_code, 
     conn.close()
 
 async def fetch_discord_agents():
-    """Fetches all Discord members and stores their usernames."""
     logging.info("Fetching all agents (members) in the Discord server.")
     channel = bot.get_channel(DISCORD_CHANNEL_ID)
     guild = channel.guild
@@ -96,7 +95,7 @@ async def fetch_discord_agents():
 async def scan_past_messages():
     logging.info("Scanning past messages in the Discord channel.")
     channel = bot.get_channel(DISCORD_CHANNEL_ID)
-    await fetch_discord_agents()  # Fetch all members and store in discord_agents
+    await fetch_discord_agents()
     async for message in channel.history(limit=None):
         if message.embeds:
             embed = message.embeds[0]
@@ -109,15 +108,13 @@ async def scan_past_messages():
             zip_code = fields.get("zip code", "N/A")
             age = int(age) if age.isdigit() else None
             
-            # Default status and agent
             status = "new"
             agent = "unknown"
             
-            # Determine agent and status based on reactions
             for reaction in message.reactions:
                 async for user in reaction.users():
-                    if user != bot.user:  # Only consider non-bot users as agents
-                        agent = user.name  # Use Discord username as agent name
+                    if user != bot.user:
+                        agent = user.name
                         if str(reaction.emoji) == "🔥":
                             status = "sold/booked"
                         elif str(reaction.emoji) == "📵":
@@ -127,65 +124,74 @@ async def scan_past_messages():
             
             save_or_update_lead(message.id, name, phone, gender, age, zip_code, status, agent)
 
+@app.route('/agent-dashboard', methods=['GET'])
+def get_lead_counts():
+    logging.info("Handling request to /agent-dashboard for lead counts.")
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT COUNT(*) FROM leads WHERE status = 'called'")
+    called_leads_count = cursor.fetchone()[0]
+    
+    cursor.execute("SELECT COUNT(*) FROM leads WHERE status = 'sold/booked'")
+    sold_leads_count = cursor.fetchone()[0]
+    
+    cursor.execute("SELECT COUNT(*) FROM leads")
+    total_leads_count = cursor.fetchone()[0]
+    
+    closed_percentage = (sold_leads_count / total_leads_count * 100) if total_leads_count > 0 else 0
+    
+    cursor.execute("SELECT AVG(age) FROM leads WHERE age IS NOT NULL")
+    average_age = cursor.fetchone()[0] or 0
+    
+    cursor.execute("SELECT zip_code, COUNT(*) AS zip_count FROM leads GROUP BY zip_code ORDER BY zip_count DESC LIMIT 1")
+    popular_zip = cursor.fetchone()
+    popular_zip = popular_zip[0] if popular_zip else "N/A"
+    
+    cursor.execute("SELECT gender, COUNT(*) AS gender_count FROM leads GROUP BY gender ORDER BY gender_count DESC LIMIT 1")
+    popular_gender = cursor.fetchone()
+    popular_gender = popular_gender[0] if popular_gender else "N/A"
+    
+    cursor.execute("SELECT strftime('%H', created_at) AS hour, COUNT(*) FROM leads GROUP BY hour")
+    hours = cursor.fetchall()
+    hottest_time = "N/A"
+    if hours:
+        hour_counts = {int(hour): count for hour, count in hours}
+        hottest_time = max(hour_counts, key=hour_counts.get)
+        hottest_time = f"{hottest_time:02d}:00 - {hottest_time + 3:02d}:00"
+
+    conn.close()
+    
+    return jsonify({
+        "called_leads_count": called_leads_count,
+        "sold_leads_count": sold_leads_count,
+        "total_leads_count": total_leads_count,
+        "closed_percentage": round(closed_percentage, 2),
+        "average_age": round(average_age, 1),
+        "popular_zip": popular_zip,
+        "popular_gender": popular_gender,
+        "hottest_time": hottest_time
+    })
+
 @app.route('/agent-leaderboard', methods=['GET'])
 def get_agent_leaderboard():
-    logging.info("Handling request to /agent-leaderboard for all-time sales leaderboard.")
+    logging.info("Handling request to /agent-leaderboard for sales leaderboard.")
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
 
-    # Initialize leaderboard with all agents from Discord and zero sales
     leaderboard = {agent: 0 for agent in discord_agents}
-
-    # Get agents with sales counts from agent_sales table
     cursor.execute("SELECT agent, sales_count FROM agent_sales")
     sales_counts = cursor.fetchall()
-
-    # Update leaderboard dictionary with actual sales counts
     for agent, count in sales_counts:
         leaderboard[agent] = count
 
-    # Convert leaderboard dictionary to a sorted list by sales count
     sorted_leaderboard = [{"agent": agent, "sales_count": count} for agent, count in sorted(leaderboard.items(), key=lambda x: x[1], reverse=True)]
-    
-    conn.close()
-    return jsonify(sorted_leaderboard)
-
-@app.route('/agent-leaderboard-weekly', methods=['GET'])
-def get_agent_leaderboard_weekly():
-    logging.info("Handling request to /agent-leaderboard-weekly for weekly sales leaderboard.")
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-    cursor = conn.cursor()
-    
-    # Get date 7 days ago from today
-    seven_days_ago = datetime.now() - timedelta(days=7)
-
-    # Initialize leaderboard with all agents from Discord and zero sales
-    leaderboard = {agent: 0 for agent in discord_agents}
-
-    # Get agents with sales counts in the past 7 days
-    cursor.execute('''
-        SELECT agent, COUNT(*) as sales_count 
-        FROM leads 
-        WHERE status = 'sold/booked' AND created_at >= ?
-        GROUP BY agent
-    ''', (seven_days_ago,))
-    
-    sales_counts = cursor.fetchall()
-
-    # Update leaderboard dictionary with actual sales counts
-    for agent, count in sales_counts:
-        leaderboard[agent] = count
-
-    # Convert leaderboard dictionary to a sorted list by sales count
-    sorted_leaderboard = [{"agent": agent, "sales_count": count} for agent, count in sorted(leaderboard.items(), key=lambda x: x[1], reverse=True)]
-    
     conn.close()
     return jsonify(sorted_leaderboard)
 
 @bot.event
 async def on_ready():
     logging.info(f'Logged in as {bot.user} (ID: {bot.user.id})')
-    logging.info('Bot is online and ready.')
     await scan_past_messages()
 
 def run_flask_app():
