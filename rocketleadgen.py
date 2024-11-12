@@ -1,6 +1,6 @@
 import discord
-from discord.ext import commands, tasks
-from flask import Flask, request, jsonify
+from discord.ext import commands
+from flask import Flask, jsonify
 from flask_cors import CORS
 import logging
 import sqlite3
@@ -33,7 +33,6 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # Global variable to store all agent usernames from Discord
 discord_agents = []
 
-# Database setup function
 def setup_database():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -63,13 +62,75 @@ def setup_database():
 
 setup_database()
 
+def save_or_update_lead(discord_message_id, name, phone, gender, age, zip_code, status, agent):
+    logging.info(f"Saving lead - ID: {discord_message_id}, Name: {name}, Agent: {agent}, Status: {status}")
+    
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO leads (discord_message_id, name, phone, gender, age, zip_code, status, created_at, agent)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(discord_message_id) DO UPDATE SET status=excluded.status, agent=excluded.agent
+    ''', (discord_message_id, name, phone, gender, age, zip_code, status, datetime.now(), agent))
+    
+    if status == "sold/booked":
+        cursor.execute('''
+            INSERT INTO agent_sales (agent, sales_count)
+            VALUES (?, 1)
+            ON CONFLICT(agent) DO UPDATE SET sales_count = sales_count + 1
+        ''', (agent,))
+    
+    conn.commit()
+    conn.close()
+
+async def scan_past_messages():
+    """Scans past messages in the Discord channel to populate the database."""
+    logging.info("Scanning past messages in the Discord channel.")
+    channel = bot.get_channel(DISCORD_CHANNEL_ID)
+    await fetch_discord_agents()  # Fetch all members and store in discord_agents
+    async for message in channel.history(limit=None):
+        if message.embeds:
+            embed = message.embeds[0]
+            fields = {field.name.lower(): field.value for field in embed.fields}
+            
+            name = fields.get("name", "N/A")
+            phone = fields.get("phone number", "N/A")
+            gender = fields.get("gender", "N/A")
+            age = fields.get("age", "N/A")
+            zip_code = fields.get("zip code", "N/A")
+            age = int(age) if age.isdigit() else None
+            
+            status = "new"
+            agent = "unknown"
+            
+            for reaction in message.reactions:
+                async for user in reaction.users():
+                    if user != bot.user:  
+                        agent = user.name  
+                        if str(reaction.emoji) == "🔥":
+                            status = "sold/booked"
+                        elif str(reaction.emoji) == "📵":
+                            status = "do-not-call"
+                        elif str(reaction.emoji) == "✅":
+                            status = "called"
+            
+            save_or_update_lead(message.id, name, phone, gender, age, zip_code, status, agent)
+
+async def fetch_discord_agents():
+    """Fetches all Discord members and stores their usernames."""
+    logging.info("Fetching all agents (members) in the Discord server.")
+    channel = bot.get_channel(DISCORD_CHANNEL_ID)
+    guild = channel.guild
+    global discord_agents
+    discord_agents = [member.name for member in guild.members if not member.bot]
+    logging.info(f"Fetched {len(discord_agents)} agents from Discord.")
+
 @app.route('/agent-dashboard', methods=['GET'])
 def get_dashboard_metrics():
     logging.info("Handling request to /agent-dashboard for dashboard metrics.")
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
     
-    # Fetching metrics
     cursor.execute("SELECT COUNT(*) FROM leads WHERE status = 'called'")
     called_leads_count = cursor.fetchone()[0]
     
