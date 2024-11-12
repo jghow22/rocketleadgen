@@ -5,7 +5,7 @@ from flask_cors import CORS
 import logging
 import sqlite3
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from threading import Thread
 import asyncio
 
@@ -21,13 +21,13 @@ DISCORD_CHANNEL_ID = int(os.getenv('DISCORD_CHANNEL_ID'))
 
 # Initialize Flask app
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "https://your-wix-site-domain.com"}})  # Replace with your actual Wix domain
+CORS(app, resources={r"/*": {"origins": "https://your-wix-site-domain.com"}})
 
 # Create a Discord bot instance
 intents = discord.Intents.default()
 intents.message_content = True
 intents.reactions = True
-intents.members = True  # Enable fetching of all members
+intents.members = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # Global variable to store all agent usernames from Discord
@@ -46,7 +46,6 @@ def setup_database():
             age INTEGER,
             zip_code TEXT,
             status TEXT DEFAULT 'new',
-            lead_type TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             agent TEXT
         )
@@ -63,16 +62,16 @@ def setup_database():
 
 setup_database()
 
-def save_or_update_lead(discord_message_id, name, phone, gender, age, zip_code, status, agent, lead_type="warm"):
-    logging.info(f"Saving lead - ID: {discord_message_id}, Name: {name}, Agent: {agent}, Status: {status}, Type: {lead_type}")
+def save_or_update_lead(discord_message_id, name, phone, gender, age, zip_code, status, agent):
+    logging.info(f"Saving lead - ID: {discord_message_id}, Name: {name}, Agent: {agent}, Status: {status}")
     
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
     cursor.execute('''
-        INSERT INTO leads (discord_message_id, name, phone, gender, age, zip_code, status, created_at, agent, lead_type)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO leads (discord_message_id, name, phone, gender, age, zip_code, status, created_at, agent)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(discord_message_id) DO UPDATE SET status=excluded.status, agent=excluded.agent
-    ''', (discord_message_id, name, phone, gender, age, zip_code, status, datetime.now(), agent, lead_type))
+    ''', (discord_message_id, name, phone, gender, age, zip_code, status, datetime.now(), agent))
     
     # Update agent sales count if lead is sold
     if status == "sold/booked":
@@ -110,9 +109,6 @@ async def scan_past_messages():
             zip_code = fields.get("zip code", "N/A")
             age = int(age) if age.isdigit() else None
             
-            # Determine if lead is hot or warm
-            lead_type = "hot" if embed.title == "Hot Lead" else "warm"
-            
             # Default status and agent
             status = "new"
             agent = "unknown"
@@ -129,99 +125,59 @@ async def scan_past_messages():
                         elif str(reaction.emoji) == "✅":
                             status = "called"
             
-            save_or_update_lead(message.id, name, phone, gender, age, zip_code, status, agent, lead_type)
-
-@app.route('/agent-dashboard', methods=['GET'])
-def get_lead_counts():
-    logging.info("Handling request to /agent-dashboard for lead counts.")
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-    cursor = conn.cursor()
-    
-    # Called leads count
-    cursor.execute("SELECT COUNT(*) FROM leads WHERE status = 'called'")
-    called_leads_count = cursor.fetchone()[0]
-    
-    # Sold leads count
-    cursor.execute("SELECT COUNT(*) FROM leads WHERE status = 'sold/booked'")
-    sold_leads_count = cursor.fetchone()[0]
-    
-    # Total leads count
-    cursor.execute("SELECT COUNT(*) FROM leads")
-    total_leads_count = cursor.fetchone()[0]
-    
-    # Uncalled leads count
-    cursor.execute("SELECT COUNT(*) FROM leads WHERE status = 'new'")
-    uncalled_leads_count = cursor.fetchone()[0]
-
-    # Hot leads count
-    cursor.execute("SELECT COUNT(*) FROM leads WHERE lead_type = 'hot'")
-    hot_leads_count = cursor.fetchone()[0]
-    
-    # Closed percentage
-    closed_percentage = (sold_leads_count / total_leads_count * 100) if total_leads_count > 0 else 0
-    
-    # Average age
-    cursor.execute("SELECT AVG(age) FROM leads WHERE age IS NOT NULL")
-    average_age = cursor.fetchone()[0] or 0
-    
-    # Most popular zip code
-    cursor.execute("SELECT zip_code, COUNT(*) AS zip_count FROM leads GROUP BY zip_code ORDER BY zip_count DESC LIMIT 1")
-    popular_zip = cursor.fetchone()
-    popular_zip = popular_zip[0] if popular_zip else "N/A"
-    
-    # Most popular gender
-    cursor.execute("SELECT gender, COUNT(*) AS gender_count FROM leads GROUP BY gender ORDER BY gender_count DESC LIMIT 1")
-    popular_gender = cursor.fetchone()
-    popular_gender = popular_gender[0] if popular_gender else "N/A"
-    
-    # Hottest time of day (3-hour range with most leads)
-    cursor.execute("SELECT strftime('%H', created_at) AS hour, COUNT(*) FROM leads GROUP BY hour")
-    hours = cursor.fetchall()
-    hottest_time = "N/A"
-    if hours:
-        hour_counts = {int(hour): count for hour, count in hours}
-        hottest_time = max(hour_counts, key=hour_counts.get)
-        hottest_time = f"{hottest_time:02d}:00 - {hottest_time + 3:02d}:00"
-
-    conn.close()
-    
-    return jsonify({
-        "called_leads_count": called_leads_count,
-        "sold_leads_count": sold_leads_count,
-        "total_leads_count": total_leads_count,
-        "uncalled_leads_count": uncalled_leads_count,
-        "closed_percentage": round(closed_percentage, 2),
-        "average_age": round(average_age, 1),
-        "popular_zip": popular_zip,
-        "popular_gender": popular_gender,
-        "hottest_time": hottest_time,
-        "hot_leads_count": hot_leads_count
-    })
+            save_or_update_lead(message.id, name, phone, gender, age, zip_code, status, agent)
 
 @app.route('/agent-leaderboard', methods=['GET'])
 def get_agent_leaderboard():
-    logging.info("Handling request to /agent-leaderboard for sales leaderboard.")
+    logging.info("Handling request to /agent-leaderboard for all-time sales leaderboard.")
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
 
     # Initialize leaderboard with all agents from Discord and zero sales
-    leaderboard = {agent: {"sales_count": 0, "leads_called": 0} for agent in discord_agents}
+    leaderboard = {agent: 0 for agent in discord_agents}
 
     # Get agents with sales counts from agent_sales table
     cursor.execute("SELECT agent, sales_count FROM agent_sales")
     sales_counts = cursor.fetchall()
-    for agent, count in sales_counts:
-        leaderboard[agent]["sales_count"] = count
 
-    # Count the leads called by each agent
-    cursor.execute("SELECT agent, COUNT(*) FROM leads WHERE status = 'called' GROUP BY agent")
-    leads_called_counts = cursor.fetchall()
-    for agent, count in leads_called_counts:
-        if agent in leaderboard:
-            leaderboard[agent]["leads_called"] = count
+    # Update leaderboard dictionary with actual sales counts
+    for agent, count in sales_counts:
+        leaderboard[agent] = count
 
     # Convert leaderboard dictionary to a sorted list by sales count
-    sorted_leaderboard = [{"agent": agent, **data} for agent, data in sorted(leaderboard.items(), key=lambda x: x[1]["sales_count"], reverse=True)]
+    sorted_leaderboard = [{"agent": agent, "sales_count": count} for agent, count in sorted(leaderboard.items(), key=lambda x: x[1], reverse=True)]
+    
+    conn.close()
+    return jsonify(sorted_leaderboard)
+
+@app.route('/agent-leaderboard-weekly', methods=['GET'])
+def get_agent_leaderboard_weekly():
+    logging.info("Handling request to /agent-leaderboard-weekly for weekly sales leaderboard.")
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    cursor = conn.cursor()
+    
+    # Get date 7 days ago from today
+    seven_days_ago = datetime.now() - timedelta(days=7)
+
+    # Initialize leaderboard with all agents from Discord and zero sales
+    leaderboard = {agent: 0 for agent in discord_agents}
+
+    # Get agents with sales counts in the past 7 days
+    cursor.execute('''
+        SELECT agent, COUNT(*) as sales_count 
+        FROM leads 
+        WHERE status = 'sold/booked' AND created_at >= ?
+        GROUP BY agent
+    ''', (seven_days_ago,))
+    
+    sales_counts = cursor.fetchall()
+
+    # Update leaderboard dictionary with actual sales counts
+    for agent, count in sales_counts:
+        leaderboard[agent] = count
+
+    # Convert leaderboard dictionary to a sorted list by sales count
+    sorted_leaderboard = [{"agent": agent, "sales_count": count} for agent, count in sorted(leaderboard.items(), key=lambda x: x[1], reverse=True)]
     
     conn.close()
     return jsonify(sorted_leaderboard)
