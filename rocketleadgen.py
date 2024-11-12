@@ -10,7 +10,7 @@ from threading import Thread
 import asyncio
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)  # Set to DEBUG level for detailed logs
 
 # Database path
 DB_PATH = 'leads.db'
@@ -21,7 +21,7 @@ DISCORD_CHANNEL_ID = int(os.getenv('DISCORD_CHANNEL_ID'))
 
 # Initialize Flask app
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})  # For testing, allow all origins
+CORS(app, resources={r"/*": {"origins": "*"}})  # Allow all origins for debugging
 
 # Create a Discord bot instance
 intents = discord.Intents.default()
@@ -63,8 +63,7 @@ def setup_database():
 setup_database()
 
 def save_or_update_lead(discord_message_id, name, phone, gender, age, zip_code, status, agent):
-    logging.info(f"Saving lead - ID: {discord_message_id}, Name: {name}, Agent: {agent}, Status: {status}")
-    
+    logging.debug(f"Saving or updating lead - ID: {discord_message_id}, Name: {name}, Agent: {agent}, Status: {status}")
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
     cursor.execute('''
@@ -73,7 +72,6 @@ def save_or_update_lead(discord_message_id, name, phone, gender, age, zip_code, 
         ON CONFLICT(discord_message_id) DO UPDATE SET status=excluded.status, agent=excluded.agent
     ''', (discord_message_id, name, phone, gender, age, zip_code, status, datetime.now(), agent))
     
-    # Update agent sales count if lead is sold
     if status == "sold/booked":
         cursor.execute('''
             INSERT INTO agent_sales (agent, sales_count)
@@ -181,6 +179,24 @@ def get_agent_leaderboard():
 
     leaderboard = {agent: 0 for agent in discord_agents}
     cursor.execute("SELECT agent, sales_count FROM agent_sales")
+    sales_counts = cursor.fetchall()
+    for agent, count in sales_counts:
+        leaderboard[agent] = count
+
+    sorted_leaderboard = [{"agent": agent, "sales_count": count} for agent, count in sorted(leaderboard.items(), key=lambda x: x[1], reverse=True)]
+    conn.close()
+    return jsonify(sorted_leaderboard)
+
+@app.route('/weekly-leaderboard', methods=['GET'])
+def get_weekly_leaderboard():
+    logging.info("Handling request to /weekly-leaderboard for weekly leaderboard.")
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    cursor = conn.cursor()
+
+    start_date = datetime.now() - timedelta(days=7)
+    leaderboard = {agent: 0 for agent in discord_agents}
+
+    cursor.execute("SELECT agent, COUNT(*) FROM leads WHERE status = 'sold/booked' AND created_at >= ? GROUP BY agent", (start_date,))
     sales_counts = cursor.fetchall()
     for agent, count in sales_counts:
         leaderboard[agent] = count
