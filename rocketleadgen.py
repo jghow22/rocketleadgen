@@ -220,7 +220,6 @@ def get_agent_leaderboard():
         if agent in leaderboard:
             leaderboard[agent]["leads_called"] = count
 
-    # Convert leaderboard dictionary to a sorted list by sales count
     sorted_leaderboard = [{"agent": agent, **data} for agent, data in sorted(leaderboard.items(), key=lambda x: x[1]["sales_count"], reverse=True)]
     
     conn.close()
@@ -232,11 +231,9 @@ def get_weekly_leaderboard():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
 
-    # Define a datetime threshold for the last 7 days
     threshold_date = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d %H:%M:%S')
     logging.info(f"Weekly leaderboard filtering for leads after: {threshold_date}")
 
-    # Initialize leaderboard with all agents from Discord and zero sales and calls
     leaderboard = {agent: {"sales_count": 0, "leads_called": 0} for agent in discord_agents}
 
     # Get agents with sales counts for the last 7 days
@@ -259,12 +256,10 @@ def get_weekly_leaderboard():
         if agent in leaderboard:
             leaderboard[agent]["leads_called"] = count
 
-    # Log each agent's data for debugging
     logging.info("Weekly Leaderboard Results:")
     for agent, data in leaderboard.items():
         logging.info(f"Agent: {agent}, Sales: {data['sales_count']}, Leads Called: {data['leads_called']}")
 
-    # Convert leaderboard dictionary to a sorted list by sales count
     sorted_leaderboard = [{"agent": agent, **data} for agent, data in sorted(leaderboard.items(), key=lambda x: x[1]["sales_count"], reverse=True)]
     
     conn.close()
