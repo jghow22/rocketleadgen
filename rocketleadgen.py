@@ -200,20 +200,21 @@ def get_lead_counts():
 
 @app.route('/agent-leaderboard', methods=['GET'])
 def get_agent_leaderboard():
-    logging.info("Handling request to /agent-leaderboard for sales leaderboard.")
+    """Fetches the all-time leaderboard data for each agent."""
+    logging.info("Handling request to /agent-leaderboard for all-time sales leaderboard.")
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
 
     # Initialize leaderboard with all agents from Discord and zero stats
     leaderboard = {agent: {"sales_count": 0, "leads_called": 0} for agent in discord_agents}
 
-    # Get agents with sales counts from agent_sales table
+    # Get agents with all-time sales counts from agent_sales table
     cursor.execute("SELECT agent, sales_count FROM agent_sales")
     sales_counts = cursor.fetchall()
     for agent, count in sales_counts:
         leaderboard[agent]["sales_count"] = count
 
-    # Count the leads called by each agent
+    # Count the all-time leads called by each agent
     cursor.execute("SELECT agent, COUNT(*) FROM leads WHERE status = 'called' GROUP BY agent")
     leads_called_counts = cursor.fetchall()
     for agent, count in leads_called_counts:
@@ -228,37 +229,32 @@ def get_agent_leaderboard():
 
 @app.route('/weekly-leaderboard', methods=['GET'])
 def get_weekly_leaderboard():
+    """Fetches the weekly leaderboard data for each agent, filtered by the last 7 days."""
     logging.info("Handling request to /weekly-leaderboard for weekly sales leaderboard.")
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
 
-    # Define cutoff date for the last 7 days and format it for SQLite comparison
-    cutoff_date = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d %H:%M:%S')
+    # Define cutoff date for the last 7 days as a Python datetime object
+    cutoff_date = datetime.now() - timedelta(days=7)
     logging.info(f"Weekly leaderboard filtering for leads after: {cutoff_date}")
 
-    # Log entries that match the weekly cutoff and check created_at timestamps
-    cursor.execute("SELECT agent, created_at, status FROM leads WHERE DATE(created_at) >= DATE(?)", (cutoff_date,))
+    # Fetch entries from the past 7 days directly from the database
+    cursor.execute("SELECT agent, created_at, status FROM leads WHERE created_at >= ?", (cutoff_date.strftime('%Y-%m-%d %H:%M:%S'),))
     recent_entries = cursor.fetchall()
-    logging.info("Detailed Weekly Entries Check (within last 7 days):")
+
+    logging.info("Recent Entries for Weekly Leaderboard:")
     for entry in recent_entries:
         logging.info(f"Agent: {entry[0]}, Created At: {entry[1]}, Status: {entry[2]}")
 
     # Initialize leaderboard with all agents from Discord and zero stats
     leaderboard = {agent: {"sales_count": 0, "leads_called": 0} for agent in discord_agents}
 
-    # Fetch sales created in the past 7 days, formatted explicitly for consistency
-    cursor.execute("SELECT agent FROM leads WHERE status = 'sold/booked' AND DATE(created_at) >= DATE(?)", (cutoff_date,))
-    weekly_sales_entries = cursor.fetchall()
-    logging.info(f"Weekly Sales Entries Fetched: {weekly_sales_entries}")
-    for (agent,) in weekly_sales_entries:
-        leaderboard[agent]["sales_count"] += 1
-
-    # Fetch leads called created in the past 7 days, formatted explicitly
-    cursor.execute("SELECT agent FROM leads WHERE status = 'called' AND DATE(created_at) >= DATE(?)", (cutoff_date,))
-    weekly_leads_called_entries = cursor.fetchall()
-    logging.info(f"Weekly Leads Called Entries Fetched: {weekly_leads_called_entries}")
-    for (agent,) in weekly_leads_called_entries:
-        leaderboard[agent]["leads_called"] += 1
+    # Aggregate weekly sales and leads called from recent_entries
+    for agent, created_at, status in recent_entries:
+        if status == "sold/booked":
+            leaderboard[agent]["sales_count"] += 1
+        elif status == "called":
+            leaderboard[agent]["leads_called"] += 1
 
     # Convert leaderboard dictionary to a sorted list by sales count
     sorted_weekly_leaderboard = [{"agent": agent, **data} for agent, data in sorted(leaderboard.items(), key=lambda x: x[1]["sales_count"], reverse=True)]
