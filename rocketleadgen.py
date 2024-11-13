@@ -5,7 +5,7 @@ from flask_cors import CORS
 import logging
 import sqlite3
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from threading import Thread
 import asyncio
 
@@ -213,7 +213,7 @@ def get_agent_leaderboard():
     for agent, count in sales_counts:
         leaderboard[agent]["sales_count"] = count
 
-    # Count the leads called by each agent in the all-time data
+    # Count the leads called by each agent in the all-time range
     cursor.execute("SELECT agent, COUNT(*) FROM leads WHERE status = 'called' GROUP BY agent")
     leads_called_counts = cursor.fetchall()
     for agent, count in leads_called_counts:
@@ -232,12 +232,17 @@ def get_weekly_leaderboard():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
 
+    # Define a datetime threshold for the last 7 days
+    threshold_date = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d %H:%M:%S')
+    logging.info(f"Weekly leaderboard filtering for leads after: {threshold_date}")
+
     # Initialize leaderboard with all agents from Discord and zero sales and calls
     leaderboard = {agent: {"sales_count": 0, "leads_called": 0} for agent in discord_agents}
 
     # Get agents with sales counts for the last 7 days
     cursor.execute(
-        "SELECT agent, COUNT(*) FROM leads WHERE status = 'sold/booked' AND DATE(created_at) >= DATE('now', '-7 days') GROUP BY agent"
+        "SELECT agent, COUNT(*) FROM leads WHERE status = 'sold/booked' AND created_at >= ? GROUP BY agent",
+        (threshold_date,)
     )
     sales_counts = cursor.fetchall()
     for agent, count in sales_counts:
@@ -246,12 +251,18 @@ def get_weekly_leaderboard():
 
     # Count the leads called by each agent for the last 7 days
     cursor.execute(
-        "SELECT agent, COUNT(*) FROM leads WHERE status = 'called' AND DATE(created_at) >= DATE('now', '-7 days') GROUP BY agent"
+        "SELECT agent, COUNT(*) FROM leads WHERE status = 'called' AND created_at >= ? GROUP BY agent",
+        (threshold_date,)
     )
     leads_called_counts = cursor.fetchall()
     for agent, count in leads_called_counts:
         if agent in leaderboard:
             leaderboard[agent]["leads_called"] = count
+
+    # Log each agent's data for debugging
+    logging.info("Weekly Leaderboard Results:")
+    for agent, data in leaderboard.items():
+        logging.info(f"Agent: {agent}, Sales: {data['sales_count']}, Leads Called: {data['leads_called']}")
 
     # Convert leaderboard dictionary to a sorted list by sales count
     sorted_leaderboard = [{"agent": agent, **data} for agent, data in sorted(leaderboard.items(), key=lambda x: x[1]["sales_count"], reverse=True)]
