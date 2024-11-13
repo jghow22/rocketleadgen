@@ -236,10 +236,10 @@ def get_weekly_leaderboard():
     cutoff_date = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d %H:%M:%S')
     logging.info(f"Weekly leaderboard filtering for leads after: {cutoff_date}")
 
-    # Debugging: Log recent entries to confirm `created_at` values
+    # Log entries that match the weekly cutoff and check created_at timestamps
     cursor.execute("SELECT agent, created_at, status FROM leads WHERE created_at >= ?", (cutoff_date,))
     recent_entries = cursor.fetchall()
-    logging.info("Recent Entries in last 7 days:")
+    logging.info("Detailed Weekly Entries Check (within last 7 days):")
     for entry in recent_entries:
         logging.info(f"Agent: {entry[0]}, Created At: {entry[1]}, Status: {entry[2]}")
 
