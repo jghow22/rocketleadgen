@@ -64,7 +64,9 @@ def setup_database():
 setup_database()
 
 def save_or_update_lead(discord_message_id, name, phone, gender, age, zip_code, status, agent, lead_type="warm"):
-    logging.info(f"Saving lead - ID: {discord_message_id}, Name: {name}, Agent: {agent}, Status: {status}, Type: {lead_type}")
+    # Format the current timestamp to ensure consistency
+    created_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    logging.info(f"Saving lead - ID: {discord_message_id}, Name: {name}, Agent: {agent}, Status: {status}, Type: {lead_type}, Created At: {created_at}")
     
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
@@ -72,7 +74,7 @@ def save_or_update_lead(discord_message_id, name, phone, gender, age, zip_code, 
         INSERT INTO leads (discord_message_id, name, phone, gender, age, zip_code, status, created_at, agent, lead_type)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(discord_message_id) DO UPDATE SET status=excluded.status, agent=excluded.agent
-    ''', (discord_message_id, name, phone, gender, age, zip_code, status, datetime.now(), agent, lead_type))
+    ''', (discord_message_id, name, phone, gender, age, zip_code, status, created_at, agent, lead_type))
     
     # Update agent sales count if lead is sold
     if status == "sold/booked":
@@ -213,13 +215,14 @@ def get_agent_leaderboard():
     for agent, count in sales_counts:
         leaderboard[agent]["sales_count"] = count
 
-    # Count the leads called by each agent in the all-time range
+    # Count all-time leads called by each agent
     cursor.execute("SELECT agent, COUNT(*) FROM leads WHERE status = 'called' GROUP BY agent")
     leads_called_counts = cursor.fetchall()
     for agent, count in leads_called_counts:
         if agent in leaderboard:
             leaderboard[agent]["leads_called"] = count
 
+    # Convert leaderboard dictionary to a sorted list by sales count
     sorted_leaderboard = [{"agent": agent, **data} for agent, data in sorted(leaderboard.items(), key=lambda x: x[1]["sales_count"], reverse=True)]
     
     conn.close()
