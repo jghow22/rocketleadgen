@@ -5,7 +5,7 @@ from flask_cors import CORS
 import logging
 import sqlite3
 import os
-from datetime import datetime, timedelta  # Import timedelta for weekly range filtering
+from datetime import datetime, timedelta
 from threading import Thread
 import asyncio
 
@@ -200,20 +200,20 @@ def get_lead_counts():
 
 @app.route('/agent-leaderboard', methods=['GET'])
 def get_agent_leaderboard():
-    logging.info("Handling request to /agent-leaderboard for sales leaderboard.")
+    logging.info("Handling request to /agent-leaderboard for all-time sales leaderboard.")
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
 
-    # Initialize leaderboard with all agents from Discord and zero sales
+    # Initialize leaderboard with all agents from Discord and zero sales and calls
     leaderboard = {agent: {"sales_count": 0, "leads_called": 0} for agent in discord_agents}
 
-    # Get agents with sales counts from agent_sales table
+    # Get agents with all-time sales counts from agent_sales table
     cursor.execute("SELECT agent, sales_count FROM agent_sales")
     sales_counts = cursor.fetchall()
     for agent, count in sales_counts:
         leaderboard[agent]["sales_count"] = count
 
-    # Count the leads called by each agent
+    # Count the leads called by each agent in the all-time data
     cursor.execute("SELECT agent, COUNT(*) FROM leads WHERE status = 'called' GROUP BY agent")
     leads_called_counts = cursor.fetchall()
     for agent, count in leads_called_counts:
@@ -236,17 +236,18 @@ def get_weekly_leaderboard():
     seven_days_ago = datetime.now() - timedelta(days=7)
     seven_days_ago_str = seven_days_ago.strftime('%Y-%m-%d %H:%M:%S')
 
-    # Initialize leaderboard with all agents from Discord and zero sales
+    # Initialize leaderboard with all agents from Discord and zero sales and calls
     leaderboard = {agent: {"sales_count": 0, "leads_called": 0} for agent in discord_agents}
 
-    # Get agents with sales counts from leads in the last 7 days
+    # Get agents with sales counts from leads sold in the last 7 days
     cursor.execute(
         "SELECT agent, COUNT(*) FROM leads WHERE status = 'sold/booked' AND created_at >= ? GROUP BY agent",
         (seven_days_ago_str,)
     )
     sales_counts = cursor.fetchall()
     for agent, count in sales_counts:
-        leaderboard[agent]["sales_count"] = count
+        if agent in leaderboard:
+            leaderboard[agent]["sales_count"] = count
 
     # Count the leads called by each agent in the last 7 days
     cursor.execute(
