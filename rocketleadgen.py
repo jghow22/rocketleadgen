@@ -241,7 +241,7 @@ def get_weekly_leaderboard():
 
     # Get agents with sales counts from leads sold in the last 7 days
     cursor.execute(
-        "SELECT agent, COUNT(*) FROM leads WHERE status = 'sold/booked' AND created_at >= ? GROUP BY agent",
+        "SELECT agent, COUNT(*) FROM leads WHERE status = 'sold/booked' AND datetime(created_at) >= datetime(?) GROUP BY agent",
         (seven_days_ago_str,)
     )
     sales_counts = cursor.fetchall()
@@ -251,7 +251,7 @@ def get_weekly_leaderboard():
 
     # Count the leads called by each agent in the last 7 days
     cursor.execute(
-        "SELECT agent, COUNT(*) FROM leads WHERE status = 'called' AND created_at >= ? GROUP BY agent",
+        "SELECT agent, COUNT(*) FROM leads WHERE status = 'called' AND datetime(created_at) >= datetime(?) GROUP BY agent",
         (seven_days_ago_str,)
     )
     leads_called_counts = cursor.fetchall()
