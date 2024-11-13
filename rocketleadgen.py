@@ -5,7 +5,7 @@ from flask_cors import CORS
 import logging
 import sqlite3
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta  # Import timedelta for weekly range filtering
 from threading import Thread
 import asyncio
 
@@ -232,24 +232,37 @@ def get_weekly_leaderboard():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
 
-    one_week_ago = datetime.now() - timedelta(days=7)
+    # Calculate the date for 7 days ago
+    seven_days_ago = datetime.now() - timedelta(days=7)
+    seven_days_ago_str = seven_days_ago.strftime('%Y-%m-%d %H:%M:%S')
+
+    # Initialize leaderboard with all agents from Discord and zero sales
     leaderboard = {agent: {"sales_count": 0, "leads_called": 0} for agent in discord_agents}
 
-    cursor.execute("SELECT agent, COUNT(*) FROM leads WHERE status = 'sold/booked' AND created_at >= ? GROUP BY agent", (one_week_ago,))
-    weekly_sales_counts = cursor.fetchall()
-    for agent, count in weekly_sales_counts:
+    # Get agents with sales counts from leads in the last 7 days
+    cursor.execute(
+        "SELECT agent, COUNT(*) FROM leads WHERE status = 'sold/booked' AND created_at >= ? GROUP BY agent",
+        (seven_days_ago_str,)
+    )
+    sales_counts = cursor.fetchall()
+    for agent, count in sales_counts:
         leaderboard[agent]["sales_count"] = count
 
-    cursor.execute("SELECT agent, COUNT(*) FROM leads WHERE status = 'called' AND created_at >= ? GROUP BY agent", (one_week_ago,))
-    weekly_leads_called_counts = cursor.fetchall()
-    for agent, count in weekly_leads_called_counts:
+    # Count the leads called by each agent in the last 7 days
+    cursor.execute(
+        "SELECT agent, COUNT(*) FROM leads WHERE status = 'called' AND created_at >= ? GROUP BY agent",
+        (seven_days_ago_str,)
+    )
+    leads_called_counts = cursor.fetchall()
+    for agent, count in leads_called_counts:
         if agent in leaderboard:
             leaderboard[agent]["leads_called"] = count
 
-    sorted_weekly_leaderboard = [{"agent": agent, **data} for agent, data in sorted(leaderboard.items(), key=lambda x: x[1]["sales_count"], reverse=True)]
+    # Convert leaderboard dictionary to a sorted list by sales count
+    sorted_leaderboard = [{"agent": agent, **data} for agent, data in sorted(leaderboard.items(), key=lambda x: x[1]["sales_count"], reverse=True)]
     
     conn.close()
-    return jsonify(sorted_weekly_leaderboard)
+    return jsonify(sorted_leaderboard)
 
 @bot.event
 async def on_ready():
