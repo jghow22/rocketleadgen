@@ -235,13 +235,14 @@ def get_weekly_leaderboard():
     # Calculate the date for 7 days ago
     seven_days_ago = datetime.now() - timedelta(days=7)
     seven_days_ago_str = seven_days_ago.strftime('%Y-%m-%d %H:%M:%S')
+    logging.info(f"Filtering for leads created since: {seven_days_ago_str}")
 
     # Initialize leaderboard with all agents from Discord and zero sales and calls
     leaderboard = {agent: {"sales_count": 0, "leads_called": 0} for agent in discord_agents}
 
-    # Get agents with sales counts from leads sold in the last 7 days
+    # Get agents with sales counts for the last 7 days
     cursor.execute(
-        "SELECT agent, COUNT(*) FROM leads WHERE status = 'sold/booked' AND datetime(created_at) >= datetime(?) GROUP BY agent",
+        "SELECT agent, COUNT(*) FROM leads WHERE status = 'sold/booked' AND datetime(created_at) >= ? GROUP BY agent",
         (seven_days_ago_str,)
     )
     sales_counts = cursor.fetchall()
@@ -249,9 +250,9 @@ def get_weekly_leaderboard():
         if agent in leaderboard:
             leaderboard[agent]["sales_count"] = count
 
-    # Count the leads called by each agent in the last 7 days
+    # Count the leads called by each agent for the last 7 days
     cursor.execute(
-        "SELECT agent, COUNT(*) FROM leads WHERE status = 'called' AND datetime(created_at) >= datetime(?) GROUP BY agent",
+        "SELECT agent, COUNT(*) FROM leads WHERE status = 'called' AND datetime(created_at) >= ? GROUP BY agent",
         (seven_days_ago_str,)
     )
     leads_called_counts = cursor.fetchall()
