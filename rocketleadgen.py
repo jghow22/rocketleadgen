@@ -72,7 +72,7 @@ def save_or_update_lead(discord_message_id, name, phone, gender, age, zip_code, 
         INSERT INTO leads (discord_message_id, name, phone, gender, age, zip_code, status, created_at, agent, lead_type)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(discord_message_id) DO UPDATE SET status=excluded.status, agent=excluded.agent
-    ''', (discord_message_id, name, phone, gender, age, zip_code, status, datetime.now(), agent, lead_type))
+    ''', (discord_message_id, name, phone, gender, age, zip_code, status, datetime.utcnow(), agent, lead_type))
     
     # Update agent sales count if lead is sold
     if status == "sold/booked":
@@ -234,12 +234,12 @@ def get_weekly_leaderboard():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
 
-    # Define cutoff date for the last 7 days as a Python datetime object
-    cutoff_date = datetime.now() - timedelta(days=7)
-    logging.info(f"Weekly leaderboard filtering for leads after: {cutoff_date}")
+    # Define cutoff date for the last 7 days as a string for SQLite filtering
+    cutoff_date_str = (datetime.utcnow() - timedelta(days=7)).strftime('%Y-%m-%d %H:%M:%S')
+    logging.info(f"Weekly leaderboard filtering for leads after: {cutoff_date_str}")
 
     # Fetch entries from the past 7 days directly from the database
-    cursor.execute("SELECT agent, created_at, status FROM leads WHERE created_at >= ?", (cutoff_date.strftime('%Y-%m-%d %H:%M:%S'),))
+    cursor.execute("SELECT agent, created_at, status FROM leads WHERE created_at >= ?", (cutoff_date_str,))
     recent_entries = cursor.fetchall()
 
     logging.info("Recent Entries for Weekly Leaderboard:")
