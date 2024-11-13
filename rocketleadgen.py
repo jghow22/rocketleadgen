@@ -234,19 +234,19 @@ def get_weekly_leaderboard():
 
     # Define cutoff date for the last 7 days
     cutoff_date = datetime.now() - timedelta(days=7)
-    logging.info(f"Weekly leaderboard filtering with cutoff date: {cutoff_date}")
+    logging.info(f"Weekly leaderboard filtering for leads after: {cutoff_date}")
 
     # Initialize leaderboard with all agents from Discord and zero stats
     leaderboard = {agent: {"sales_count": 0, "leads_called": 0} for agent in discord_agents}
 
     # Fetch sales created in the past 7 days
-    cursor.execute("SELECT agent FROM leads WHERE status = 'sold/booked' AND created_at >= ?", (cutoff_date,))
+    cursor.execute("SELECT agent FROM leads WHERE status = 'sold/booked' AND datetime(created_at) >= datetime(?)", (cutoff_date,))
     weekly_sales_entries = cursor.fetchall()
     for agent, in weekly_sales_entries:
         leaderboard[agent]["sales_count"] += 1
 
     # Fetch leads called created in the past 7 days
-    cursor.execute("SELECT agent FROM leads WHERE status = 'called' AND created_at >= ?", (cutoff_date,))
+    cursor.execute("SELECT agent FROM leads WHERE status = 'called' AND datetime(created_at) >= datetime(?)", (cutoff_date,))
     weekly_leads_called_entries = cursor.fetchall()
     for agent, in weekly_leads_called_entries:
         leaderboard[agent]["leads_called"] += 1
