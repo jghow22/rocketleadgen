@@ -236,18 +236,27 @@ def get_weekly_leaderboard():
     cutoff_date = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d %H:%M:%S')
     logging.info(f"Weekly leaderboard filtering for leads after: {cutoff_date}")
 
+    # Debugging: Log recent entries to confirm `created_at` values
+    cursor.execute("SELECT agent, created_at, status FROM leads WHERE created_at >= ?", (cutoff_date,))
+    recent_entries = cursor.fetchall()
+    logging.info("Recent Entries in last 7 days:")
+    for entry in recent_entries:
+        logging.info(f"Agent: {entry[0]}, Created At: {entry[1]}, Status: {entry[2]}")
+
     # Initialize leaderboard with all agents from Discord and zero stats
     leaderboard = {agent: {"sales_count": 0, "leads_called": 0} for agent in discord_agents}
 
     # Fetch sales created in the past 7 days
     cursor.execute("SELECT agent FROM leads WHERE status = 'sold/booked' AND created_at >= ?", (cutoff_date,))
     weekly_sales_entries = cursor.fetchall()
+    logging.info(f"Weekly Sales Entries Fetched: {weekly_sales_entries}")
     for (agent,) in weekly_sales_entries:
         leaderboard[agent]["sales_count"] += 1
 
     # Fetch leads called created in the past 7 days
     cursor.execute("SELECT agent FROM leads WHERE status = 'called' AND created_at >= ?", (cutoff_date,))
     weekly_leads_called_entries = cursor.fetchall()
+    logging.info(f"Weekly Leads Called Entries Fetched: {weekly_leads_called_entries}")
     for (agent,) in weekly_leads_called_entries:
         leaderboard[agent]["leads_called"] += 1
 
