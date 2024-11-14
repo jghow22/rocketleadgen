@@ -185,7 +185,7 @@ def get_lead_counts():
 
     conn.close()
     
-    return jsonify({
+    metrics_data = {
         "called_leads_count": called_leads_count,
         "sold_leads_count": sold_leads_count,
         "total_leads_count": total_leads_count,
@@ -196,7 +196,9 @@ def get_lead_counts():
         "popular_gender": popular_gender,
         "hottest_time": hottest_time,
         "hot_leads_count": hot_leads_count
-    })
+    }
+    logging.info("Dashboard Metrics Data Returned: %s", metrics_data)  # Log the metrics data for verification
+    return jsonify(metrics_data)
 
 @app.route('/agent-leaderboard', methods=['GET'])
 def get_agent_leaderboard():
@@ -205,28 +207,23 @@ def get_agent_leaderboard():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
 
-    # Initialize leaderboard with all agents from Discord and zero stats
     leaderboard = {agent: {"sales_count": 0, "leads_called": 0} for agent in discord_agents}
 
-    # Get agents with all-time sales counts from agent_sales table
     cursor.execute("SELECT agent, sales_count FROM agent_sales")
     sales_counts = cursor.fetchall()
     for agent, count in sales_counts:
         leaderboard[agent]["sales_count"] = count
 
-    # Count the all-time leads called by each agent
     cursor.execute("SELECT agent, COUNT(*) FROM leads WHERE status = 'called' GROUP BY agent")
     leads_called_counts = cursor.fetchall()
     for agent, count in leads_called_counts:
         if agent in leaderboard:
             leaderboard[agent]["leads_called"] = count
 
-    # Convert leaderboard dictionary to a sorted list by sales count
     sorted_leaderboard = [{"agent": agent, **data} for agent, data in sorted(leaderboard.items(), key=lambda x: x[1]["sales_count"], reverse=True)]
     
     conn.close()
-    logging.info("All-Time Leaderboard Data Sent:")
-    logging.info(sorted_leaderboard)  # Log structure for debugging
+    logging.info("All-Time Leaderboard Data Returned: %s", sorted_leaderboard)  # Log the leaderboard data for verification
     return jsonify(sorted_leaderboard)
 
 @app.route('/weekly-leaderboard', methods=['GET'])
@@ -236,11 +233,9 @@ def get_weekly_leaderboard():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
 
-    # Define cutoff date for the last 7 days as a string for SQLite filtering
     cutoff_date_str = (datetime.utcnow() - timedelta(days=7)).strftime('%Y-%m-%d %H:%M:%S')
     logging.info(f"Weekly leaderboard filtering for leads after: {cutoff_date_str}")
 
-    # Fetch entries from the past 7 days directly from the database
     cursor.execute("SELECT agent, created_at, status FROM leads WHERE created_at >= ?", (cutoff_date_str,))
     recent_entries = cursor.fetchall()
 
@@ -248,21 +243,17 @@ def get_weekly_leaderboard():
     for entry in recent_entries:
         logging.info(f"Agent: {entry[0]}, Created At: {entry[1]}, Status: {entry[2]}")
 
-    # Initialize leaderboard with all agents from Discord and zero stats
     leaderboard = {agent: {"sales_count": 0, "leads_called": 0} for agent in discord_agents}
 
-    # Aggregate weekly sales and leads called from recent_entries
     for agent, created_at, status in recent_entries:
         if status == "sold/booked":
             leaderboard[agent]["sales_count"] += 1
         elif status == "called":
             leaderboard[agent]["leads_called"] += 1
 
-    # Convert leaderboard dictionary to a sorted list by sales count
     sorted_weekly_leaderboard = [{"agent": agent, **data} for agent, data in sorted(leaderboard.items(), key=lambda x: x[1]["sales_count"], reverse=True)]
 
-    logging.info("Weekly Leaderboard Data Sent:")
-    logging.info(sorted_weekly_leaderboard)  # Log structure for debugging
+    logging.info("Weekly Leaderboard Data Returned: %s", sorted_weekly_leaderboard)  # Log the weekly leaderboard data for verification
     conn.close()
     return jsonify(sorted_weekly_leaderboard)
 
