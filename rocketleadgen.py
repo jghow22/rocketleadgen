@@ -77,6 +77,7 @@ def read_leads_from_csv(file_path):
             return None
         df['Name'] = df['FirstName'] + ' ' + df['LastName']
         df = df.rename(columns={'Zip': 'Zip Code'})[['Name', 'Phone', 'Gender', 'Age', 'Zip Code']]
+        logging.info(f"Read {len(df)} leads from CSV.")
         return df
     except Exception as e:
         logging.error(f"Error reading CSV: {e}")
@@ -98,6 +99,7 @@ async def send_lead(channel):
     embed.add_field(name="Zip Code", value=lead["Zip Code"], inline=True)
     await channel.send(embed=embed)
     current_lead_index = (current_lead_index + 1) % len(leads)
+    logging.info(f"Sent warm lead {lead['Name']} from CSV to Discord.")
 
 @tasks.loop(minutes=10)
 async def send_lead_from_csv():
@@ -111,6 +113,7 @@ async def fetch_discord_agents():
     guild = channel.guild
     global discord_agents
     discord_agents = [member.name for member in guild.members if not member.bot]
+    logging.info(f"Fetched {len(discord_agents)} agents from Discord.")
 
 async def scan_past_messages():
     channel = bot.get_channel(DISCORD_CHANNEL_ID)
@@ -139,6 +142,7 @@ async def scan_past_messages():
                         elif str(reaction.emoji) == "✅":
                             status = "called"
             save_or_update_lead(message.id, name, phone, gender, age, zip_code, status, agent, lead_type)
+    logging.info("Completed scanning past messages for lead data.")
 
 def save_or_update_lead(discord_message_id, name, phone, gender, age, zip_code, status, agent, lead_type="warm"):
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
@@ -156,6 +160,7 @@ def save_or_update_lead(discord_message_id, name, phone, gender, age, zip_code, 
         ''', (agent,))
     conn.commit()
     conn.close()
+    logging.info(f"Saved or updated lead {name} in database with status '{status}'.")
 
 @app.route('/wix-webhook', methods=['POST'])
 def handle_wix_webhook():
