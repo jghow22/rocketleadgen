@@ -72,7 +72,7 @@ def save_or_update_lead(discord_message_id, name, phone, gender, age, zip_code, 
         INSERT INTO leads (discord_message_id, name, phone, gender, age, zip_code, status, created_at, agent, lead_type)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(discord_message_id) DO UPDATE SET status=excluded.status, agent=excluded.agent
-    ''', (discord_message_id, name, phone, gender, age, zip_code, status, datetime.utcnow(), agent, lead_type))
+    ''', (discord_message_id, name, phone, gender, age, zip_code, status, datetime.now(), agent, lead_type))
     
     # Update agent sales count if lead is sold
     if status == "sold/booked":
@@ -185,7 +185,7 @@ def get_lead_counts():
 
     conn.close()
     
-    metrics_data = {
+    return jsonify({
         "called_leads_count": called_leads_count,
         "sold_leads_count": sold_leads_count,
         "total_leads_count": total_leads_count,
@@ -196,33 +196,34 @@ def get_lead_counts():
         "popular_gender": popular_gender,
         "hottest_time": hottest_time,
         "hot_leads_count": hot_leads_count
-    }
-    logging.info("Dashboard Metrics Data Returned: %s", metrics_data)  # Log the metrics data for verification
-    return jsonify(metrics_data)
+    })
 
 @app.route('/agent-leaderboard', methods=['GET'])
 def get_agent_leaderboard():
-    logging.info("Handling request to /agent-leaderboard for all-time sales leaderboard.")
+    logging.info("Handling request to /agent-leaderboard for sales leaderboard.")
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
 
+    # Initialize leaderboard with all agents from Discord and zero stats
     leaderboard = {agent: {"sales_count": 0, "leads_called": 0} for agent in discord_agents}
 
+    # Get agents with sales counts from agent_sales table
     cursor.execute("SELECT agent, sales_count FROM agent_sales")
     sales_counts = cursor.fetchall()
     for agent, count in sales_counts:
         leaderboard[agent]["sales_count"] = count
 
+    # Count the leads called by each agent
     cursor.execute("SELECT agent, COUNT(*) FROM leads WHERE status = 'called' GROUP BY agent")
     leads_called_counts = cursor.fetchall()
     for agent, count in leads_called_counts:
         if agent in leaderboard:
             leaderboard[agent]["leads_called"] = count
 
+    # Convert leaderboard dictionary to a sorted list by sales count
     sorted_leaderboard = [{"agent": agent, **data} for agent, data in sorted(leaderboard.items(), key=lambda x: x[1]["sales_count"], reverse=True)]
     
     conn.close()
-    logging.info("All-Time Leaderboard Data Returned: %s", sorted_leaderboard)  # Log the leaderboard data for verification
     return jsonify(sorted_leaderboard)
 
 @app.route('/weekly-leaderboard', methods=['GET'])
@@ -231,27 +232,32 @@ def get_weekly_leaderboard():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
 
-    cutoff_date_str = (datetime.utcnow() - timedelta(days=7)).strftime('%Y-%m-%d %H:%M:%S')
-    logging.info(f"Weekly leaderboard filtering for leads after: {cutoff_date_str}")
+    # Define cutoff date for the last 7 days
+    cutoff_date = datetime.now() - timedelta(days=7)
+    logging.info(f"Weekly leaderboard filtering for leads after: {cutoff_date}")
 
-    cursor.execute("SELECT agent, created_at, status FROM leads WHERE created_at >= ?", (cutoff_date_str,))
-    recent_entries = cursor.fetchall()
-
-    logging.info("Recent Entries for Weekly Leaderboard:")
-    for entry in recent_entries:
-        logging.info(f"Agent: {entry[0]}, Created At: {entry[1]}, Status: {entry[2]}")
-
+    # Initialize leaderboard with all agents from Discord and zero stats
     leaderboard = {agent: {"sales_count": 0, "leads_called": 0} for agent in discord_agents}
 
-    for agent, created_at, status in recent_entries:
-        if status == "sold/booked":
-            leaderboard[agent]["sales_count"] += 1
-        elif status == "called":
-            leaderboard[agent]["leads_called"] += 1
+    # Fetch sales created in the past 7 days
+    cursor.execute("SELECT agent FROM leads WHERE status = 'sold/booked' AND datetime(created_at) >= datetime(?)", (cutoff_date,))
+    weekly_sales_entries = cursor.fetchall()
+    for agent, in weekly_sales_entries:
+        leaderboard[agent]["sales_count"] += 1
 
+    # Fetch leads called created in the past 7 days
+    cursor.execute("SELECT agent FROM leads WHERE status = 'called' AND datetime(created_at) >= datetime(?)", (cutoff_date,))
+    weekly_leads_called_entries = cursor.fetchall()
+    for agent, in weekly_leads_called_entries:
+        leaderboard[agent]["leads_called"] += 1
+
+    # Convert leaderboard dictionary to a sorted list by sales count
     sorted_weekly_leaderboard = [{"agent": agent, **data} for agent, data in sorted(leaderboard.items(), key=lambda x: x[1]["sales_count"], reverse=True)]
 
-    logging.info("Weekly Leaderboard Data Returned: %s", sorted_weekly_leaderboard)  # Log the weekly leaderboard data for verification
+    logging.info("Weekly Leaderboard Results after filtering:")
+    for entry in sorted_weekly_leaderboard:
+        logging.info(f"Agent: {entry['agent']}, Sales: {entry['sales_count']}, Leads Called: {entry['leads_called']}")
+
     conn.close()
     return jsonify(sorted_weekly_leaderboard)
 
