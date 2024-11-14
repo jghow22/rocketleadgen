@@ -112,6 +112,7 @@ async def send_lead_from_csv():
         logging.info("Attempting to send warm lead from CSV.")
         channel = bot.get_channel(DISCORD_CHANNEL_ID)
         if channel:
+            logging.info("Discord channel found, attempting to send lead.")
             await send_lead(channel)
         else:
             logging.error("Discord channel not found or accessible.")
@@ -240,12 +241,31 @@ def get_lead_counts():
         "hot_leads_count": hot_leads_count
     })
 
+@app.route('/agent-leaderboard', methods=['GET'])
+def get_agent_leaderboard():
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    cursor = conn.cursor()
+    leaderboard = {agent: {"sales_count": 0, "leads_called": 0} for agent in discord_agents}
+    cursor.execute("SELECT agent, sales_count FROM agent_sales")
+    sales_counts = cursor.fetchall()
+    for agent, count in sales_counts:
+        leaderboard[agent]["sales_count"] = count
+    cursor.execute("SELECT agent, COUNT(*) FROM leads WHERE status = 'called' GROUP BY agent")
+    leads_called_counts = cursor.fetchall()
+    for agent, count in leads_called_counts:
+        if agent in leaderboard:
+            leaderboard[agent]["leads_called"] = count
+    sorted_leaderboard = [{"agent": agent, **data} for agent, data in sorted(leaderboard.items(), key=lambda x: x[1]["sales_count"], reverse=True)]
+    conn.close()
+    return jsonify(sorted_leaderboard)
+
 @bot.event
 async def on_ready():
     logging.info(f'Logged in as {bot.user} (ID: {bot.user.id})')
     send_lead_from_csv.start()
     await scan_past_messages()
 
+# Running Flask and bot concurrently
 def run_flask_app():
     app.run(host='0.0.0.0', port=10000)
 
