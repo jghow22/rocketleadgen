@@ -202,7 +202,6 @@ def get_lead_counts():
 
 @app.route('/agent-leaderboard', methods=['GET'])
 def get_agent_leaderboard():
-    """Fetches the all-time leaderboard data for each agent."""
     logging.info("Handling request to /agent-leaderboard for all-time sales leaderboard.")
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
@@ -228,7 +227,6 @@ def get_agent_leaderboard():
 
 @app.route('/weekly-leaderboard', methods=['GET'])
 def get_weekly_leaderboard():
-    """Fetches the weekly leaderboard data for each agent, filtered by the last 7 days."""
     logging.info("Handling request to /weekly-leaderboard for weekly sales leaderboard.")
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
