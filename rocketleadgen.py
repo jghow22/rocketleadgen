@@ -225,6 +225,8 @@ def get_agent_leaderboard():
     sorted_leaderboard = [{"agent": agent, **data} for agent, data in sorted(leaderboard.items(), key=lambda x: x[1]["sales_count"], reverse=True)]
     
     conn.close()
+    logging.info("All-Time Leaderboard Data Sent:")
+    logging.info(sorted_leaderboard)
     return jsonify(sorted_leaderboard)
 
 @app.route('/weekly-leaderboard', methods=['GET'])
@@ -259,10 +261,8 @@ def get_weekly_leaderboard():
     # Convert leaderboard dictionary to a sorted list by sales count
     sorted_weekly_leaderboard = [{"agent": agent, **data} for agent, data in sorted(leaderboard.items(), key=lambda x: x[1]["sales_count"], reverse=True)]
 
-    logging.info("Weekly Leaderboard Results after filtering:")
-    for entry in sorted_weekly_leaderboard:
-        logging.info(f"Agent: {entry['agent']}, Sales: {entry['sales_count']}, Leads Called: {entry['leads_called']}")
-
+    logging.info("Weekly Leaderboard Data Sent:")
+    logging.info(sorted_weekly_leaderboard)
     conn.close()
     return jsonify(sorted_weekly_leaderboard)
 
