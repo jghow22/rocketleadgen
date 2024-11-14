@@ -226,7 +226,7 @@ def get_agent_leaderboard():
     
     conn.close()
     logging.info("All-Time Leaderboard Data Sent:")
-    logging.info(sorted_leaderboard)
+    logging.info(sorted_leaderboard)  # Log structure for debugging
     return jsonify(sorted_leaderboard)
 
 @app.route('/weekly-leaderboard', methods=['GET'])
@@ -262,7 +262,7 @@ def get_weekly_leaderboard():
     sorted_weekly_leaderboard = [{"agent": agent, **data} for agent, data in sorted(leaderboard.items(), key=lambda x: x[1]["sales_count"], reverse=True)]
 
     logging.info("Weekly Leaderboard Data Sent:")
-    logging.info(sorted_weekly_leaderboard)
+    logging.info(sorted_weekly_leaderboard)  # Log structure for debugging
     conn.close()
     return jsonify(sorted_weekly_leaderboard)
 
