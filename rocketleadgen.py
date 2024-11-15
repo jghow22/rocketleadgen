@@ -107,15 +107,16 @@ async def send_lead(channel):
 
 @tasks.loop(minutes=10)
 async def send_lead_from_csv():
+    logging.info("CSV lead sending task triggered.")
     current_time = datetime.now(pytz.timezone(TIME_ZONE))
     if 8 <= current_time.hour < 18:
-        logging.info("Attempting to send warm lead from CSV.")
+        logging.info("Within business hours, attempting to send warm lead.")
         channel = bot.get_channel(DISCORD_CHANNEL_ID)
         if channel:
             logging.info("Discord channel found, attempting to send lead.")
             await send_lead(channel)
         else:
-            logging.error("Discord channel not found or accessible.")
+            logging.error("Discord channel not found or accessible. Check DISCORD_CHANNEL_ID.")
     else:
         logging.info("Outside of business hours; skipping warm lead send.")
 
@@ -263,6 +264,7 @@ def get_agent_leaderboard():
 async def on_ready():
     logging.info(f'Logged in as {bot.user} (ID: {bot.user.id})')
     send_lead_from_csv.start()
+    logging.info("Warm lead CSV send task started.")
     await scan_past_messages()
 
 # Running Flask and bot concurrently
