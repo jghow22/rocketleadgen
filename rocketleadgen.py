@@ -235,6 +235,18 @@ def get_lead_counts():
     popular_gender = cursor.fetchone()
     popular_gender = popular_gender[0] if popular_gender else "N/A"
 
+    # Hottest time of day (3-hour range with most leads)
+    cursor.execute("SELECT strftime('%H', created_at) AS hour, COUNT(*) FROM leads GROUP BY hour")
+    hours = cursor.fetchall()
+    hottest_time = "N/A"
+    if hours:
+        hour_counts = {int(hour): count for hour, count in hours}
+        hottest_hour = max(hour_counts, key=hour_counts.get)
+        start_hour_12 = datetime.strptime(f"{hottest_hour}", "%H").strftime("%I %p")
+        end_hour = (hottest_hour + 3) % 24
+        end_hour_12 = datetime.strptime(f"{end_hour}", "%H").strftime("%I %p")
+        hottest_time = f"{start_hour_12} - {end_hour_12}"
+
     conn.close()
     
     return jsonify({
@@ -246,6 +258,7 @@ def get_lead_counts():
         "average_age": round(average_age, 1),
         "popular_zip": popular_zip,
         "popular_gender": popular_gender,
+        "hottest_time": hottest_time,
         "hot_leads_count": hot_leads_count
     })
 
