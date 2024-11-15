@@ -10,7 +10,6 @@ import pandas as pd
 from threading import Thread
 import asyncio
 import pytz
-import time
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -67,6 +66,7 @@ setup_database()
 
 def read_leads_from_csv(file_path):
     try:
+        logging.info("Attempting to read leads from CSV.")
         df = pd.read_csv(file_path)
         required_columns = ['FirstName', 'LastName', 'Phone', 'Gender', 'Age', 'Zip']
         if not all(column in df.columns for column in required_columns):
@@ -82,6 +82,7 @@ def read_leads_from_csv(file_path):
 
 async def send_lead(channel):
     global current_lead_index
+    logging.info("Attempting to send a lead from the CSV file.")
     leads = read_leads_from_csv(CSV_FILE_PATH)
     if leads is None or leads.empty:
         logging.warning("No leads available in CSV.")
@@ -114,7 +115,10 @@ async def send_lead_from_csv():
         channel = bot.get_channel(DISCORD_CHANNEL_ID)
         if channel:
             logging.info("Discord channel found, attempting to send lead.")
-            await send_lead(channel)
+            try:
+                await send_lead(channel)
+            except Exception as e:
+                logging.error(f"Error sending lead to Discord channel: {e}")
         else:
             logging.error("Discord channel not found or accessible. Check DISCORD_CHANNEL_ID.")
     else:
@@ -263,9 +267,8 @@ def get_agent_leaderboard():
 @bot.event
 async def on_ready():
     logging.info(f'Logged in as {bot.user} (ID: {bot.user.id})')
+    logging.info("Starting CSV lead send loop task.")
     send_lead_from_csv.start()
-    logging.info("Warm lead CSV send task started.")
-    await scan_past_messages()
 
 # Running Flask and bot concurrently
 def run_flask_app():
