@@ -21,6 +21,7 @@ DISCORD_CHANNEL_ID = int(os.getenv('DISCORD_CHANNEL_ID'))
 CSV_FILE_PATH = 'leadslistseptwenty.csv'
 DB_PATH = 'leads.db'
 TIME_ZONE = 'America/New_York'
+TEST_MODE = os.getenv("TEST_MODE", "False").lower() == "true"  # Toggle for testing
 
 # Initialize Flask app and set CORS
 app = Flask(__name__)
@@ -103,10 +104,15 @@ async def send_lead(channel):
 
 @tasks.loop(minutes=10)
 async def send_lead_from_csv():
+    # Check if we are in business hours or test mode
     current_time = datetime.now(pytz.timezone(TIME_ZONE))
-    if 8 <= current_time.hour < 18:
+    in_business_hours = 8 <= current_time.hour < 18
+    if in_business_hours or TEST_MODE:
+        logging.info("Attempting to send a warm lead from CSV.")
         channel = bot.get_channel(DISCORD_CHANNEL_ID)
         await send_lead(channel)
+    else:
+        logging.info("Outside business hours and not in test mode; skipping lead send.")
 
 async def fetch_discord_agents():
     channel = bot.get_channel(DISCORD_CHANNEL_ID)
