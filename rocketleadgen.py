@@ -135,6 +135,10 @@ async def on_ready():
     logging.info("Starting CSV lead send loop task.")
     send_lead_from_csv.start()
 
+    # Immediately trigger CSV lead for testing purposes
+    logging.info("Triggering initial CSV lead send test.")
+    await send_lead_from_csv()
+
 # Flask endpoints for Wix integration
 @app.route('/agent-dashboard', methods=['GET'])
 def get_lead_counts():
@@ -204,6 +208,36 @@ def get_agent_leaderboard():
         logging.info("No leaderboard data found.")
         return jsonify([])
 
+@app.route('/weekly-leaderboard', methods=['GET'])
+def get_weekly_leaderboard():
+    logging.info("Handling request to /weekly-leaderboard for weekly sales leaderboard.")
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    cursor = conn.cursor()
+
+    # Define cutoff date for the last 7 days
+    cutoff_date = datetime.now() - timedelta(days=7)
+    logging.info(f"Weekly leaderboard filtering for leads after: {cutoff_date}")
+
+    leaderboard = {}
+    cursor.execute("SELECT agent, COUNT(*) FROM leads WHERE status = 'sold/booked' AND datetime(created_at) >= datetime(?) GROUP BY agent", (cutoff_date,))
+    sales_counts = cursor.fetchall()
+    if sales_counts:
+        for agent, count in sales_counts:
+            leaderboard[agent] = {"sales_count": count, "leads_called": 0}
+        cursor.execute("SELECT agent, COUNT(*) FROM leads WHERE status = 'called' AND datetime(created_at) >= datetime(?) GROUP BY agent", (cutoff_date,))
+        leads_called_counts = cursor.fetchall()
+        for agent, count in leads_called_counts:
+            if agent in leaderboard:
+                leaderboard[agent]["leads_called"] = count
+        sorted_leaderboard = [{"agent": agent, **data} for agent, data in sorted(leaderboard.items(), key=lambda x: x[1]["sales_count"], reverse=True)]
+        conn.close()
+        logging.info("Weekly leaderboard data retrieved successfully.")
+        return jsonify(sorted_leaderboard)
+    else:
+        conn.close()
+        logging.info("No weekly leaderboard data found.")
+        return jsonify([])
+
 @app.route('/wix-webhook', methods=['POST'])
 def handle_wix_webhook():
     try:
@@ -223,6 +257,7 @@ def handle_wix_webhook():
         embed.add_field(name="Zip Code", value=zip_code, inline=True)
         channel = bot.get_channel(DISCORD_CHANNEL_ID)
         asyncio.run_coroutine_threadsafe(channel.send(embed=embed), bot.loop)
+        logging.info(f"Received and processed lead from Wix: {name}")
         return jsonify({"status": "success", "message": "Lead sent to Discord"}), 200
     except Exception as e:
         logging.error(f"Webhook error: {e}")
