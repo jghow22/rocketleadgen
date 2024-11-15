@@ -72,16 +72,17 @@ setup_database()
 def read_leads_from_csv(file_path):
     try:
         df = pd.read_csv(file_path)
+        logging.info(f"CSV Columns: {df.columns.tolist()}")  # Log the CSV columns for debugging
         required_columns = ['FirstName', 'LastName', 'Phone', 'Gender', 'Age', 'Zip']
         if not all(column in df.columns for column in required_columns):
-            logging.error("Missing required columns in CSV.")
+            logging.error(f"CSV file is missing required columns. Expected: {required_columns}")
             return None
         df['Name'] = df['FirstName'] + ' ' + df['LastName']
         df = df.rename(columns={'Zip': 'Zip Code'})[['Name', 'Phone', 'Gender', 'Age', 'Zip Code']]
-        logging.info(f"Read {len(df)} leads from CSV.")
+        logging.info(f"CSV file read successfully with {len(df)} leads.")
         return df
     except Exception as e:
-        logging.error(f"Error reading CSV: {e}")
+        logging.error(f"Error reading CSV file: {e}")
         return None
 
 async def send_lead(channel):
