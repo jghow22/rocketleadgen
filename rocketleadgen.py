@@ -99,6 +99,7 @@ async def send_lead(channel):
     embed.add_field(name="Gender", value=lead["Gender"], inline=True)
     embed.add_field(name="Age", value=lead["Age"], inline=True)
     embed.add_field(name="Zip Code", value=lead["Zip Code"], inline=True)
+    embed.add_field(name="Source", value="CSV File", inline=False)  # Add source field for warm leads
     message = await channel.send(embed=embed)
     save_or_update_lead(message.id, lead["Name"], lead["Phone"], lead["Gender"], lead["Age"], lead["Zip Code"], "new", "unknown", "warm")
     current_lead_index = (current_lead_index + 1) % len(leads)
@@ -186,6 +187,7 @@ def handle_wix_webhook():
         embed.add_field(name="Gender", value=gender, inline=True)
         embed.add_field(name="Age", value=age, inline=True)
         embed.add_field(name="Zip Code", value=zip_code, inline=True)
+        embed.add_field(name="Source", value="Rushton Insurance Solutions Website", inline=False)  # Source field
         channel = bot.get_channel(DISCORD_CHANNEL_ID)
         message = asyncio.run_coroutine_threadsafe(channel.send(embed=embed), bot.loop).result()
         save_or_update_lead(message.id, name, phone, gender, age, zip_code, "new", "unknown", "hot")
@@ -200,30 +202,26 @@ def handle_quote_phish_webhook():
         data = request.json
         logging.info(f"Received JSON data from Quote Phish webhook: {data}")
 
-        # Extract fields from 'submissions'
         submissions = data.get('data', {}).get('submissions', [])
         submission_data = {item['label']: item['value'] for item in submissions}
 
-        # Get values using the extracted data
         name = submission_data.get('Name', 'N/A')
         phone = submission_data.get('Phone', data.get('field:phone_53f5', 'N/A'))
-        gender = submission_data.get('Gender', 'N/A')  # Gender may be missing, placeholder here
+        gender = submission_data.get('Gender', 'N/A')  # Gender may be missing
         dob = submission_data.get('Date of birth', 'N/A')
         zip_code = submission_data.get('Zip code', 'N/A')
 
-        # Create a Discord embed message
-        embed = discord.Embed(title="Quote Phish Lead", color=0x00ff00)
+        embed = discord.Embed(title="Hot Lead", color=0x00ff00)
         embed.add_field(name="Name", value=name, inline=True)
         embed.add_field(name="Phone", value=phone, inline=True)
         embed.add_field(name="Gender", value=gender, inline=True)
         embed.add_field(name="Date of Birth", value=dob, inline=True)
         embed.add_field(name="Zip Code", value=zip_code, inline=True)
+        embed.add_field(name="Source", value="Quote Phish Website", inline=False)  # Source field for Quote Phish
 
-        # Send the embed to the designated Discord channel
         channel = bot.get_channel(DISCORD_CHANNEL_ID)
         message = asyncio.run_coroutine_threadsafe(channel.send(embed=embed), bot.loop).result()
 
-        # Calculate age from DOB if possible
         age = None
         if dob != 'N/A':
             try:
@@ -233,7 +231,6 @@ def handle_quote_phish_webhook():
             except Exception as e:
                 logging.error(f"Error parsing Date of Birth: {e}")
 
-        # Save the lead to the database
         save_or_update_lead(message.id, name, phone, gender, age, zip_code, "new", "unknown", "quote-phish")
         return jsonify({"status": "success", "message": "Quote Phish lead sent to Discord"}), 200
     except Exception as e:
