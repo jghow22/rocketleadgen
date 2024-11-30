@@ -106,7 +106,6 @@ async def send_lead(channel):
 
 @tasks.loop(minutes=10)
 async def send_lead_from_csv():
-    # Check if we are in business hours or test mode
     current_time = datetime.now(pytz.timezone(TIME_ZONE))
     in_business_hours = 8 <= current_time.hour < 18
     if in_business_hours or TEST_MODE:
@@ -199,23 +198,20 @@ def handle_wix_webhook():
 def handle_quote_phish_webhook():
     try:
         data = request.json
-        name = data.get('name', 'N/A')
-        phone = data.get('phone', 'N/A')
-        gender = data.get('gender', 'N/A')
-        dob = data.get('date_of_birth', 'N/A')
-        zip_code = data.get('zip_code', 'N/A')
-
+        logging.info(f"Received data from Quote Phish webhook: {data}")
+        name = data.get('Name', 'N/A')
+        phone = data.get('Phone', 'N/A')
+        gender = data.get('Gender', 'N/A')
+        dob = data.get('Date of birth', 'N/A')
+        zip_code = data.get('Zip code', 'N/A')
         embed = discord.Embed(title="Quote Phish Lead", color=0x00ff00)
         embed.add_field(name="Name", value=name, inline=True)
         embed.add_field(name="Phone", value=phone, inline=True)
         embed.add_field(name="Gender", value=gender, inline=True)
         embed.add_field(name="Date of Birth", value=dob, inline=True)
         embed.add_field(name="Zip Code", value=zip_code, inline=True)
-
         channel = bot.get_channel(DISCORD_CHANNEL_ID)
         message = asyncio.run_coroutine_threadsafe(channel.send(embed=embed), bot.loop).result()
-
-        # Convert date of birth to age if possible
         age = None
         if dob != 'N/A':
             try:
@@ -224,7 +220,6 @@ def handle_quote_phish_webhook():
                 age = today.year - birth_date.year - ((today.month, today.day) < (birth_date.month, birth_date.day))
             except Exception as e:
                 logging.error(f"Error parsing date of birth: {e}")
-
         save_or_update_lead(message.id, name, phone, gender, age, zip_code, "new", "unknown", "quote-phish")
         return jsonify({"status": "success", "message": "Quote Phish lead sent to Discord"}), 200
     except Exception as e:
@@ -235,56 +230,26 @@ def handle_quote_phish_webhook():
 def get_lead_counts():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
-
-    # Filter by lead_type if provided
-    lead_type = request.args.get('lead_type', None)
-
-    # Build the WHERE clause
-    where_clause = ""
-    params = []
-    if lead_type:
-        where_clause = "WHERE lead_type = ?"
-        params.append(lead_type)
-
-    # Called leads count
-    cursor.execute(f"SELECT COUNT(*) FROM leads {where_clause} AND status = 'called'", params)
+    cursor.execute("SELECT COUNT(*) FROM leads WHERE status = 'called'")
     called_leads_count = cursor.fetchone()[0]
-
-    # Sold leads count
-    cursor.execute(f"SELECT COUNT(*) FROM leads {where_clause} AND status = 'sold/booked'", params)
+    cursor.execute("SELECT COUNT(*) FROM leads WHERE status = 'sold/booked'")
     sold_leads_count = cursor.fetchone()[0]
-
-    # Total leads count
-    cursor.execute(f"SELECT COUNT(*) FROM leads {where_clause}", params)
+    cursor.execute("SELECT COUNT(*) FROM leads")
     total_leads_count = cursor.fetchone()[0]
-
-    # Uncalled leads count
-    cursor.execute(f"SELECT COUNT(*) FROM leads {where_clause} AND status = 'new'", params)
+    cursor.execute("SELECT COUNT(*) FROM leads WHERE status = 'new'")
     uncalled_leads_count = cursor.fetchone()[0]
-
-    # Hot leads count
-    cursor.execute(f"SELECT COUNT(*) FROM leads {where_clause} AND lead_type = 'hot'", params)
+    cursor.execute("SELECT COUNT(*) FROM leads WHERE lead_type = 'hot'")
     hot_leads_count = cursor.fetchone()[0]
-
-    # Closed percentage
     closed_percentage = (sold_leads_count / total_leads_count * 100) if total_leads_count > 0 else 0
-
-    # Average age
-    cursor.execute(f"SELECT AVG(age) FROM leads {where_clause} AND age IS NOT NULL", params)
+    cursor.execute("SELECT AVG(age) FROM leads WHERE age IS NOT NULL")
     average_age = cursor.fetchone()[0] or 0
-
-    # Most popular zip code
-    cursor.execute(f"SELECT zip_code, COUNT(*) AS zip_count FROM leads {where_clause} GROUP BY zip_code ORDER BY zip_count DESC LIMIT 1", params)
+    cursor.execute("SELECT zip_code, COUNT(*) AS zip_count FROM leads GROUP BY zip_code ORDER BY zip_count DESC LIMIT 1")
     popular_zip = cursor.fetchone()
     popular_zip = popular_zip[0] if popular_zip else "N/A"
-
-    # Most popular gender
-    cursor.execute(f"SELECT gender, COUNT(*) AS gender_count FROM leads {where_clause} GROUP BY gender ORDER BY gender_count DESC LIMIT 1", params)
+    cursor.execute("SELECT gender, COUNT(*) AS gender_count FROM leads GROUP BY gender ORDER BY gender_count DESC LIMIT 1")
     popular_gender = cursor.fetchone()
     popular_gender = popular_gender[0] if popular_gender else "N/A"
-
-    # Hottest time of day (3-hour range with most leads)
-    cursor.execute(f"SELECT strftime('%H', created_at) AS hour, COUNT(*) FROM leads {where_clause} GROUP BY hour", params)
+    cursor.execute("SELECT strftime('%H', created_at) AS hour, COUNT(*) FROM leads GROUP BY hour")
     hours = cursor.fetchall()
     hottest_time = "N/A"
     if hours:
@@ -294,9 +259,7 @@ def get_lead_counts():
         end_hour = (hottest_hour + 3) % 24
         end_hour_12 = datetime.strptime(f"{end_hour}", "%H").strftime("%I %p")
         hottest_time = f"{start_hour_12} - {end_hour_12}"
-
     conn.close()
-
     return jsonify({
         "called_leads_count": called_leads_count,
         "sold_leads_count": sold_leads_count,
@@ -315,20 +278,11 @@ def get_agent_leaderboard():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
     leaderboard = {agent: {"sales_count": 0, "leads_called": 0} for agent in discord_agents}
-
-    # Filter by lead_type if provided
-    lead_type = request.args.get('lead_type', None)
-    params = []
-    where_clause = ""
-    if lead_type:
-        where_clause = "WHERE lead_type = ?"
-        params.append(lead_type)
-
     cursor.execute("SELECT agent, sales_count FROM agent_sales")
     sales_counts = cursor.fetchall()
     for agent, count in sales_counts:
         leaderboard[agent]["sales_count"] = count
-    cursor.execute(f"SELECT agent, COUNT(*) FROM leads {where_clause} AND status = 'called' GROUP BY agent", params)
+    cursor.execute("SELECT agent, COUNT(*) FROM leads WHERE status = 'called' GROUP BY agent")
     leads_called_counts = cursor.fetchall()
     for agent, count in leads_called_counts:
         if agent in leaderboard:
