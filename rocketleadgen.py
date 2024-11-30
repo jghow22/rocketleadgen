@@ -198,28 +198,42 @@ def handle_wix_webhook():
 def handle_quote_phish_webhook():
     try:
         data = request.json
-        logging.info(f"Received data from Quote Phish webhook: {data}")
-        name = data.get('Name', 'N/A')
-        phone = data.get('Phone', 'N/A')
-        gender = data.get('Gender', 'N/A')
-        dob = data.get('Date of birth', 'N/A')
-        zip_code = data.get('Zip code', 'N/A')
+        logging.info(f"Received JSON data from Quote Phish webhook: {data}")
+
+        # Extract fields from 'submissions'
+        submissions = data.get('data', {}).get('submissions', [])
+        submission_data = {item['label']: item['value'] for item in submissions}
+
+        # Get values using the extracted data
+        name = submission_data.get('Name', 'N/A')
+        phone = submission_data.get('Phone', data.get('field:phone_53f5', 'N/A'))
+        gender = submission_data.get('Gender', 'N/A')  # Gender may be missing, placeholder here
+        dob = submission_data.get('Date of birth', 'N/A')
+        zip_code = submission_data.get('Zip code', 'N/A')
+
+        # Create a Discord embed message
         embed = discord.Embed(title="Quote Phish Lead", color=0x00ff00)
         embed.add_field(name="Name", value=name, inline=True)
         embed.add_field(name="Phone", value=phone, inline=True)
         embed.add_field(name="Gender", value=gender, inline=True)
         embed.add_field(name="Date of Birth", value=dob, inline=True)
         embed.add_field(name="Zip Code", value=zip_code, inline=True)
+
+        # Send the embed to the designated Discord channel
         channel = bot.get_channel(DISCORD_CHANNEL_ID)
         message = asyncio.run_coroutine_threadsafe(channel.send(embed=embed), bot.loop).result()
+
+        # Calculate age from DOB if possible
         age = None
         if dob != 'N/A':
             try:
-                birth_date = datetime.strptime(dob, "%Y-%m-%d")
+                birth_date = datetime.strptime(dob, "%d%m%Y")
                 today = datetime.now()
                 age = today.year - birth_date.year - ((today.month, today.day) < (birth_date.month, birth_date.day))
             except Exception as e:
-                logging.error(f"Error parsing date of birth: {e}")
+                logging.error(f"Error parsing Date of Birth: {e}")
+
+        # Save the lead to the database
         save_or_update_lead(message.id, name, phone, gender, age, zip_code, "new", "unknown", "quote-phish")
         return jsonify({"status": "success", "message": "Quote Phish lead sent to Discord"}), 200
     except Exception as e:
