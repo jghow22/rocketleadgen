@@ -147,18 +147,19 @@ async def scan_past_messages():
 
             # Check reactions for emojis to update the status
             if message.reactions:
-                status = "called"
                 for reaction in message.reactions:
                     async for user in reaction.users():
                         if user != bot.user:
                             agent = user.name
-                            # Check for Discord or Unicode (Apple-style) emojis
-                            if str(reaction.emoji) == "🔥" or str(reaction.emoji) == "\U0001F525":
-                                status = "sold/booked"
-                            elif str(reaction.emoji) == "📵" or str(reaction.emoji) == "\U0001F4F5":
-                                status = "do-not-call"
-                            elif str(reaction.emoji) == "✅" or str(reaction.emoji) == "\u2705":
+                            # Check for specific emojis and update status accordingly
+                            if str(reaction.emoji) == "✅" or str(reaction.emoji) == "\u2705":
                                 status = "called"
+                            elif str(reaction.emoji) == "❌" or str(reaction.emoji) == "\u274C":
+                                status = "did not answer"
+                            elif str(reaction.emoji) == "🔥" or str(reaction.emoji) == "\U0001F525":
+                                status = "set/sale"
+                            elif str(reaction.emoji) == "📵" or str(reaction.emoji) == "\U0001F4F5":
+                                status = "do not call"
 
             save_or_update_lead(message.id, name, phone, gender, age, zip_code, status, agent, lead_type)
     logging.info("Completed scanning past messages for lead data.")
@@ -171,7 +172,7 @@ def save_or_update_lead(discord_message_id, name, phone, gender, age, zip_code, 
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(discord_message_id) DO UPDATE SET status=excluded.status, agent=excluded.agent
     ''', (discord_message_id, name, phone, gender, age, zip_code, status, datetime.now(), agent, lead_type))
-    if status == "sold/booked":
+    if status == "set/sale":
         cursor.execute('''
             INSERT INTO agent_sales (agent, sales_count)
             VALUES (?, 1)
@@ -260,7 +261,7 @@ def get_lead_counts():
     cursor = conn.cursor()
     cursor.execute("SELECT COUNT(*) FROM leads WHERE status = 'called'")
     called_leads_count = cursor.fetchone()[0]
-    cursor.execute("SELECT COUNT(*) FROM leads WHERE status = 'sold/booked'")
+    cursor.execute("SELECT COUNT(*) FROM leads WHERE status = 'set/sale'")
     sold_leads_count = cursor.fetchone()[0]
     cursor.execute("SELECT COUNT(*) FROM leads")
     total_leads_count = cursor.fetchone()[0]
