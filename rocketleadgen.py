@@ -10,7 +10,6 @@ import pandas as pd
 from threading import Thread
 import asyncio
 import pytz
-import time
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -72,7 +71,6 @@ setup_database()
 def read_leads_from_csv(file_path):
     try:
         df = pd.read_csv(file_path)
-        logging.info(f"CSV Columns: {df.columns.tolist()}")  # Log the CSV columns for debugging
         required_columns = ['FirstName', 'LastName', 'Phone', 'Gender', 'Age', 'Zip']
         if not all(column in df.columns for column in required_columns):
             logging.error(f"CSV file is missing required columns. Expected: {required_columns}")
@@ -81,7 +79,6 @@ def read_leads_from_csv(file_path):
         df = df.rename(columns={'Zip': 'Zip Code'})[['Name', 'Phone', 'Gender', 'Age', 'Zip Code']]
         df['Source'] = 'CSV File'
         df['Details'] = 'This lead was sourced from our CSV database and represents historical data.'
-        logging.info(f"CSV file read successfully with {len(df)} leads.")
         return df
     except Exception as e:
         logging.error(f"Error reading CSV file: {e}")
@@ -106,25 +103,14 @@ async def send_lead(channel):
     message = await channel.send(embed=embed)
     save_or_update_lead(message.id, lead["Name"], lead["Phone"], lead["Gender"], lead["Age"], lead["Zip Code"], "new", "unknown", "warm")
     current_lead_index = (current_lead_index + 1) % len(leads)
-    logging.info(f"Sent warm lead {lead['Name']} from CSV to Discord.")
 
 @tasks.loop(minutes=10)
 async def send_lead_from_csv():
     current_time = datetime.now(pytz.timezone(TIME_ZONE))
     in_business_hours = 8 <= current_time.hour < 18
     if in_business_hours or TEST_MODE:
-        logging.info("Attempting to send a warm lead from CSV.")
         channel = bot.get_channel(DISCORD_CHANNEL_ID)
         await send_lead(channel)
-    else:
-        logging.info("Outside business hours and not in test mode; skipping lead send.")
-
-async def fetch_discord_agents():
-    channel = bot.get_channel(DISCORD_CHANNEL_ID)
-    guild = channel.guild
-    global discord_agents
-    discord_agents = [member.name for member in guild.members if not member.bot]
-    logging.info(f"Fetched {len(discord_agents)} agents from Discord.")
 
 async def scan_past_messages():
     channel = bot.get_channel(DISCORD_CHANNEL_ID)
@@ -145,7 +131,6 @@ async def scan_past_messages():
             status = "not called"
             agent = "unknown"
 
-            # Define emoji mappings for statuses
             emoji_mappings = {
                 "called": ["✅", "\u2705"],
                 "did not answer": ["❌", "\u274C"],
@@ -153,7 +138,6 @@ async def scan_past_messages():
                 "do not call": ["📵", "\U0001F4F5"]
             }
 
-            # Check reactions for emojis to update the status
             if message.reactions:
                 for reaction in message.reactions:
                     async for user in reaction.users():
@@ -162,10 +146,9 @@ async def scan_past_messages():
                             for key, emoji_list in emoji_mappings.items():
                                 if str(reaction.emoji) in emoji_list:
                                     status = key
-                                    break  # Exit inner loop when status is found
+                                    break
 
             save_or_update_lead(message.id, name, phone, gender, age, zip_code, status, agent, lead_type)
-    logging.info("Completed scanning past messages for lead data.")
 
 def save_or_update_lead(discord_message_id, name, phone, gender, age, zip_code, status, agent, lead_type="warm"):
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
@@ -183,27 +166,42 @@ def save_or_update_lead(discord_message_id, name, phone, gender, age, zip_code, 
         ''', (agent,))
     conn.commit()
     conn.close()
-    logging.info(f"Saved or updated lead {name} in database with status '{status}'.")
-
-@app.route('/wix-webhook', methods=['POST'])
-def handle_wix_webhook():
-    pass  # Existing logic unchanged
-
-@app.route('/quote-phish-webhook', methods=['POST'])
-def handle_quote_phish_webhook():
-    pass  # Existing logic unchanged
 
 @app.route('/agent-dashboard', methods=['GET'])
 def get_lead_counts():
-    pass  # Existing logic unchanged
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM leads WHERE status = 'called'")
+    called_leads_count = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM leads WHERE status = 'set/sale'")
+    sold_leads_count = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM leads")
+    total_leads_count = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM leads WHERE status = 'new'")
+    uncalled_leads_count = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM leads WHERE lead_type = 'hot'")
+    hot_leads_count = cursor.fetchone()[0]
+    conn.close()
+    return jsonify({
+        "called_leads_count": called_leads_count,
+        "sold_leads_count": sold_leads_count,
+        "total_leads_count": total_leads_count,
+        "uncalled_leads_count": uncalled_leads_count,
+        "hot_leads_count": hot_leads_count
+    })
 
 @app.route('/agent-leaderboard', methods=['GET'])
 def get_agent_leaderboard():
-    pass  # Existing logic unchanged
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    cursor = conn.cursor()
+    cursor.execute("SELECT agent, COUNT(*) FROM leads WHERE status = 'called' GROUP BY agent")
+    leads_called = cursor.fetchall()
+    leaderboard = [{"agent": agent, "leads_called": leads_called} for agent, leads_called in leads_called]
+    conn.close()
+    return jsonify(leaderboard)
 
 @bot.event
 async def on_ready():
-    logging.info(f'Logged in as {bot.user} (ID: {bot.user.id})')
     send_lead_from_csv.start()
     await scan_past_messages()
 
