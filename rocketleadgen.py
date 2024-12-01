@@ -79,6 +79,8 @@ def read_leads_from_csv(file_path):
             return None
         df['Name'] = df['FirstName'] + ' ' + df['LastName']
         df = df.rename(columns={'Zip': 'Zip Code'})[['Name', 'Phone', 'Gender', 'Age', 'Zip Code']]
+        df['Source'] = 'CSV File'
+        df['Details'] = 'This lead was sourced from our CSV database and represents historical data.'
         logging.info(f"CSV file read successfully with {len(df)} leads.")
         return df
     except Exception as e:
@@ -99,7 +101,8 @@ async def send_lead(channel):
     embed.add_field(name="Gender", value=lead["Gender"], inline=True)
     embed.add_field(name="Age", value=lead["Age"], inline=True)
     embed.add_field(name="Zip Code", value=lead["Zip Code"], inline=True)
-    embed.add_field(name="Source", value="CSV File", inline=False)  # Add source field for warm leads
+    embed.add_field(name="Source", value=lead["Source"], inline=False)
+    embed.add_field(name="Details", value=lead["Details"], inline=False)
     message = await channel.send(embed=embed)
     save_or_update_lead(message.id, lead["Name"], lead["Phone"], lead["Gender"], lead["Age"], lead["Zip Code"], "new", "unknown", "warm")
     current_lead_index = (current_lead_index + 1) % len(leads)
@@ -181,13 +184,16 @@ def handle_wix_webhook():
         gender = submission_data.get('gender', data.get('data', {}).get('field:gender', 'N/A'))
         age = data.get('data', {}).get('field:age', 'N/A')
         zip_code = data.get('data', {}).get('field:zip_code', 'N/A')
+        submission_time = data.get('data', {}).get('submissionTime', 'N/A')
+        form_name = data.get('data', {}).get('formName', 'N/A')
         embed = discord.Embed(title="Hot Lead", color=0xff0000)
         embed.add_field(name="Name", value=name, inline=True)
         embed.add_field(name="Phone", value=phone, inline=True)
         embed.add_field(name="Gender", value=gender, inline=True)
         embed.add_field(name="Age", value=age, inline=True)
         embed.add_field(name="Zip Code", value=zip_code, inline=True)
-        embed.add_field(name="Source", value="Rushton Insurance Solutions Website", inline=False)  # Source field
+        embed.add_field(name="Source", value="Rushton Insurance Solutions Website", inline=False)
+        embed.add_field(name="Details", value=f"This lead was submitted through our website.\nForm Name: {form_name}\nSubmission Time: {submission_time}", inline=False)
         channel = bot.get_channel(DISCORD_CHANNEL_ID)
         message = asyncio.run_coroutine_threadsafe(channel.send(embed=embed), bot.loop).result()
         save_or_update_lead(message.id, name, phone, gender, age, zip_code, "new", "unknown", "hot")
@@ -210,6 +216,8 @@ def handle_quote_phish_webhook():
         gender = submission_data.get('Gender', 'N/A')  # Gender may be missing
         dob = submission_data.get('Date of birth', 'N/A')
         zip_code = submission_data.get('Zip code', 'N/A')
+        submission_time = data.get('data', {}).get('submissionTime', 'N/A')
+        form_name = data.get('data', {}).get('formName', 'N/A')
 
         embed = discord.Embed(title="Hot Lead", color=0x00ff00)
         embed.add_field(name="Name", value=name, inline=True)
@@ -217,7 +225,8 @@ def handle_quote_phish_webhook():
         embed.add_field(name="Gender", value=gender, inline=True)
         embed.add_field(name="Date of Birth", value=dob, inline=True)
         embed.add_field(name="Zip Code", value=zip_code, inline=True)
-        embed.add_field(name="Source", value="Quote Phish Website", inline=False)  # Source field for Quote Phish
+        embed.add_field(name="Source", value="Quote Phish Website", inline=False)
+        embed.add_field(name="Details", value=f"This lead was submitted through our Quote Phish website.\nForm Name: {form_name}\nSubmission Time: {submission_time}", inline=False)
 
         channel = bot.get_channel(DISCORD_CHANNEL_ID)
         message = asyncio.run_coroutine_threadsafe(channel.send(embed=embed), bot.loop).result()
