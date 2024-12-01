@@ -152,13 +152,13 @@ async def scan_past_messages():
                         if user != bot.user:
                             agent = user.name
                             # Check for specific emojis and update status accordingly
-                            if str(reaction.emoji) == "✅" or str(reaction.emoji) == "\u2705":
+                            if str(reaction.emoji) in ["✅", "\u2705"]:
                                 status = "called"
-                            elif str(reaction.emoji) == "❌" or str(reaction.emoji) == "\u274C":
+                            elif str(reaction.emoji) in ["❌", "\u274C"]:
                                 status = "did not answer"
-                            elif str(reaction.emoji) == "🔥" or str(reaction.emoji) == "\U0001F525":
+                            elif str(reaction.emoji) in ["🔥", "\U0001F525"]:
                                 status = "set/sale"
-                            elif str(reaction.emoji) == "📵" or str(reaction.emoji) == "\U0001F4F5":
+                            elif str(reaction.emoji) in ["📵", "\U0001F4F5"]:
                                 status = "do not call"
 
             save_or_update_lead(message.id, name, phone, gender, age, zip_code, status, agent, lead_type)
