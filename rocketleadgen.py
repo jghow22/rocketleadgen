@@ -140,18 +140,25 @@ async def scan_past_messages():
             zip_code = fields.get("zip code", "N/A")
             age = int(age) if age.isdigit() else None
             lead_type = "hot" if embed.title == "Hot Lead" else ("quote-phish" if embed.title == "Quote Phish Lead" else "warm")
-            status = "new"
+            
+            # Default status: 'not called'
+            status = "not called"
             agent = "unknown"
-            for reaction in message.reactions:
-                async for user in reaction.users():
-                    if user != bot.user:
-                        agent = user.name
-                        if str(reaction.emoji) == "🔥":
-                            status = "sold/booked"
-                        elif str(reaction.emoji) == "📵":
-                            status = "do-not-call"
-                        elif str(reaction.emoji) == "✅":
-                            status = "called"
+
+            # Check reactions for emojis to update the status
+            if message.reactions:
+                status = "called"
+                for reaction in message.reactions:
+                    async for user in reaction.users():
+                        if user != bot.user:
+                            agent = user.name
+                            if str(reaction.emoji) == "🔥":
+                                status = "sold/booked"
+                            elif str(reaction.emoji) == "📵":
+                                status = "do-not-call"
+                            elif str(reaction.emoji) == "✅":
+                                status = "called"
+            
             save_or_update_lead(message.id, name, phone, gender, age, zip_code, status, agent, lead_type)
     logging.info("Completed scanning past messages for lead data.")
 
