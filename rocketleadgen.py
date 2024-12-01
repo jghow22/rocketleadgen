@@ -84,6 +84,14 @@ def read_leads_from_csv(file_path):
         logging.error(f"Error reading CSV file: {e}")
         return None
 
+async def fetch_discord_agents():
+    """Fetch the list of Discord agents from the channel's guild."""
+    channel = bot.get_channel(DISCORD_CHANNEL_ID)
+    guild = channel.guild
+    global discord_agents
+    discord_agents = [member.name for member in guild.members if not member.bot]
+    logging.info(f"Fetched {len(discord_agents)} agents from Discord.")
+
 async def send_lead(channel):
     global current_lead_index
     leads = read_leads_from_csv(CSV_FILE_PATH)
@@ -113,6 +121,7 @@ async def send_lead_from_csv():
         await send_lead(channel)
 
 async def scan_past_messages():
+    """Scan past messages in the channel to populate the database."""
     channel = bot.get_channel(DISCORD_CHANNEL_ID)
     await fetch_discord_agents()
     async for message in channel.history(limit=None):
@@ -127,7 +136,6 @@ async def scan_past_messages():
             age = int(age) if age.isdigit() else None
             lead_type = "hot" if embed.title == "Hot Lead" else ("quote-phish" if embed.title == "Quote Phish Lead" else "warm")
             
-            # Default status: 'not called'
             status = "not called"
             agent = "unknown"
 
