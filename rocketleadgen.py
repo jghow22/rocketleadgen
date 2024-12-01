@@ -152,13 +152,14 @@ async def scan_past_messages():
                     async for user in reaction.users():
                         if user != bot.user:
                             agent = user.name
-                            if str(reaction.emoji) == "🔥":
+                            # Check for Discord or Unicode (Apple-style) emojis
+                            if str(reaction.emoji) == "🔥" or str(reaction.emoji) == "\U0001F525":
                                 status = "sold/booked"
-                            elif str(reaction.emoji) == "📵":
+                            elif str(reaction.emoji) == "📵" or str(reaction.emoji) == "\U0001F4F5":
                                 status = "do-not-call"
-                            elif str(reaction.emoji) == "✅":
+                            elif str(reaction.emoji) == "✅" or str(reaction.emoji) == "\u2705":
                                 status = "called"
-            
+
             save_or_update_lead(message.id, name, phone, gender, age, zip_code, status, agent, lead_type)
     logging.info("Completed scanning past messages for lead data.")
 
