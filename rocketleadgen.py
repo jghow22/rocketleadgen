@@ -129,15 +129,6 @@ async def fetch_discord_agents():
 async def scan_past_messages():
     channel = bot.get_channel(DISCORD_CHANNEL_ID)
     await fetch_discord_agents()
-
-    # Define equivalent emojis for each status
-    emoji_mappings = {
-        "called": {"✅", "✔️", "☑️"},
-        "sold/booked": {"🔥"},
-        "did not answer": {"❌"},
-        "do-not-call": {"📵"}
-    }
-
     async for message in channel.history(limit=None):
         if message.embeds:
             embed = message.embeds[0]
@@ -149,34 +140,26 @@ async def scan_past_messages():
             zip_code = fields.get("zip code", "N/A")
             age = int(age) if age.isdigit() else None
             lead_type = "hot" if embed.title == "Hot Lead" else ("quote-phish" if embed.title == "Quote Phish Lead" else "warm")
-            
             status = "new"
             agent = "unknown"
             reaction_found = False
-
+            
             for reaction in message.reactions:
                 async for user in reaction.users():
                     if user != bot.user:
                         agent = user.name
                         reaction_found = True
-
-                        # Match emoji to a specific category
-                        emoji = str(reaction.emoji)
-                        if emoji in emoji_mappings["sold/booked"]:
+                        if str(reaction.emoji) == "🔥":
                             status = "sold/booked"
-                        elif emoji in emoji_mappings["do-not-call"]:
+                        elif str(reaction.emoji) == "📵":
                             status = "do-not-call"
-                        elif emoji in emoji_mappings["did not answer"]:
-                            status = "did not answer"
-                        elif emoji in emoji_mappings["called"]:
+                        elif str(reaction.emoji) == "✅":
                             status = "called"
-
-            # If no specific emoji status but any reaction exists, mark as "called"
+            
             if reaction_found and status == "new":
                 status = "called"
             
             save_or_update_lead(message.id, name, phone, gender, age, zip_code, status, agent, lead_type)
-
     logging.info("Completed scanning past messages for lead data.")
 
 def save_or_update_lead(discord_message_id, name, phone, gender, age, zip_code, status, agent, lead_type="warm"):
@@ -199,8 +182,70 @@ def save_or_update_lead(discord_message_id, name, phone, gender, age, zip_code, 
 
 @app.route('/wix-webhook', methods=['POST'])
 def handle_wix_webhook():
-    # Full webhook handling logic unchanged.
-    return jsonify({"status": "success", "message": "Webhook received"}), 200
+    try:
+        data = request.json
+        submissions = data.get('data', {}).get('submissions', [])
+        submission_data = {item['label'].lower(): item['value'] for item in submissions}
+        name = submission_data.get('name', data.get('data', {}).get('field:first_name_379d', 'N/A'))
+        phone = submission_data.get('phone', data.get('data', {}).get('field:phone_23b2', 'N/A'))
+        gender = submission_data.get('gender', data.get('data', {}).get('field:gender', 'N/A'))
+        age = data.get('data', {}).get('field:age', 'N/A')
+        zip_code = data.get('data', {}).get('field:zip_code', 'N/A')
+        submission_time = data.get('data', {}).get('submissionTime', 'N/A')
+        form_name = data.get('data', {}).get('formName', 'N/A')
+        embed = discord.Embed(title="Hot Lead", color=0xff0000)
+        embed.add_field(name="Name", value=name, inline=True)
+        embed.add_field(name="Phone", value=phone, inline=True)
+        embed.add_field(name="Gender", value=gender, inline=True)
+        embed.add_field(name="Age", value=age, inline=True)
+        embed.add_field(name="Zip Code", value=zip_code, inline=True)
+        embed.add_field(name="Source", value="Rushton Insurance Solutions Website", inline=False)
+        embed.add_field(name="Details", value=f"This lead was submitted through our website.\nForm Name: {form_name}\nSubmission Time: {submission_time}", inline=False)
+        channel = bot.get_channel(DISCORD_CHANNEL_ID)
+        message = asyncio.run_coroutine_threadsafe(channel.send(embed=embed), bot.loop).result()
+        save_or_update_lead(message.id, name, phone, gender, age, zip_code, "new", "unknown", "hot")
+        return jsonify({"status": "success", "message": "Lead sent to Discord"}), 200
+    except Exception as e:
+        logging.error(f"Webhook error: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/quote-phish-webhook', methods=['POST'])
+def handle_quote_phish_webhook():
+    try:
+        data = request.json
+        logging.info(f"Received JSON data from Quote Phish webhook: {data}")
+        submissions = data.get('data', {}).get('submissions', [])
+        submission_data = {item['label']: item['value'] for item in submissions}
+        name = submission_data.get('Name', 'N/A')
+        phone = submission_data.get('Phone', data.get('field:phone_53f5', 'N/A'))
+        gender = submission_data.get('Gender', 'N/A')
+        dob = submission_data.get('Date of birth', 'N/A')
+        zip_code = submission_data.get('Zip code', 'N/A')
+        submission_time = data.get('data', {}).get('submissionTime', 'N/A')
+        form_name = data.get('data', {}).get('formName', 'N/A')
+        embed = discord.Embed(title="Hot Lead", color=0x00ff00)
+        embed.add_field(name="Name", value=name, inline=True)
+        embed.add_field(name="Phone", value=phone, inline=True)
+        embed.add_field(name="Gender", value=gender, inline=True)
+        embed.add_field(name="Date of Birth", value=dob, inline=True)
+        embed.add_field(name="Zip Code", value=zip_code, inline=True)
+        embed.add_field(name="Source", value="Quote Phish Website", inline=False)
+        embed.add_field(name="Details", value=f"This lead was submitted through our Quote Phish website.\nForm Name: {form_name}\nSubmission Time: {submission_time}", inline=False)
+        channel = bot.get_channel(DISCORD_CHANNEL_ID)
+        message = asyncio.run_coroutine_threadsafe(channel.send(embed=embed), bot.loop).result()
+        age = None
+        if dob != 'N/A':
+            try:
+                birth_date = datetime.strptime(dob, "%d%m%Y")
+                today = datetime.now()
+                age = today.year - birth_date.year - ((today.month, today.day) < (birth_date.month, birth_date.day))
+            except Exception as e:
+                logging.error(f"Error parsing Date of Birth: {e}")
+        save_or_update_lead(message.id, name, phone, gender, age, zip_code, "new", "unknown", "quote-phish")
+        return jsonify({"status": "success", "message": "Quote Phish lead sent to Discord"}), 200
+    except Exception as e:
+        logging.error(f"Quote Phish Webhook Error: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/agent-dashboard', methods=['GET'])
 def get_lead_counts():
@@ -283,4 +328,3 @@ if __name__ == '__main__':
     flask_thread = Thread(target=run_flask_app)
     flask_thread.start()
     run_discord_bot()
-
