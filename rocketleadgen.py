@@ -71,14 +71,18 @@ def setup_database():
                 logging.info(f"Lead {row['Name']} already exists in the database.")
         conn.commit()
 
+    # Update some leads for testing
+    cursor.execute("UPDATE leads SET status = 'called', agent = 'Test Agent' WHERE id % 3 = 0")
+    cursor.execute("UPDATE leads SET status = 'sold/booked', agent = 'Test Agent' WHERE id % 5 = 0")
+
     # Insert test agent sales
     cursor.execute('''
         INSERT OR IGNORE INTO agent_sales (agent, sales_count)
-        VALUES ('Test Agent', 10)
+        VALUES ('Test Agent', (SELECT COUNT(*) FROM leads WHERE agent = 'Test Agent' AND status = 'sold/booked'))
     ''')
     conn.commit()
     conn.close()
-    logging.info("Database initialized, leads loaded, and test data inserted.")
+    logging.info("Database initialized, leads updated, and test data inserted.")
 
 # Reads leads from CSV file
 def read_leads_from_csv(file_path):
@@ -130,6 +134,10 @@ def get_dashboard_metrics():
         uncalled_leads_count = cursor.fetchone()[0]
         logging.info(f"Uncalled leads count: {uncalled_leads_count}")
 
+        cursor.execute("SELECT AVG(age) FROM leads WHERE age IS NOT NULL")
+        average_age = cursor.fetchone()[0] or 0
+        logging.info(f"Average age of customers: {average_age}")
+
         cursor.execute("SELECT COUNT(*) FROM leads WHERE lead_type = 'hot'")
         hot_leads_count = cursor.fetchone()[0]
         logging.info(f"Hot leads count: {hot_leads_count}")
@@ -139,6 +147,7 @@ def get_dashboard_metrics():
             "sold_leads_count": sold_leads_count,
             "total_leads_count": total_leads_count,
             "uncalled_leads_count": uncalled_leads_count,
+            "average_age": round(average_age, 1),
             "hot_leads_count": hot_leads_count
         })
     finally:
