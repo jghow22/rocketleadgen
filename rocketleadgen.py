@@ -22,7 +22,7 @@ DB_PATH = 'leads.db'
 TIME_ZONE = 'America/New_York'
 TEST_MODE = os.getenv("TEST_MODE", "False").lower() == "true"
 
-# Initialize Flask app and CORS
+# Initialize Flask app and set CORS
 app = Flask(__name__)
 CORS(app)
 
@@ -64,14 +64,21 @@ def setup_database():
         for _, row in df.iterrows():
             try:
                 cursor.execute('''
-                    INSERT INTO leads (name, phone, gender, age, zip_code, status, lead_type)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                ''', (row['Name'], row['Phone'], row['Gender'], row['Age'], row['Zip Code'], 'new', 'warm'))
+                    INSERT INTO leads (name, phone, gender, age, zip_code, status, lead_type, agent)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (row['Name'], row['Phone'], row['Gender'], row['Age'], row['Zip Code'], 'new', 'warm', 'Test Agent'))
             except sqlite3.IntegrityError:
                 logging.info(f"Lead {row['Name']} already exists in the database.")
         conn.commit()
+
+    # Insert test agent sales
+    cursor.execute('''
+        INSERT OR IGNORE INTO agent_sales (agent, sales_count)
+        VALUES ('Test Agent', 10)
+    ''')
+    conn.commit()
     conn.close()
-    logging.info("Database initialized and leads loaded.")
+    logging.info("Database initialized, leads loaded, and test data inserted.")
 
 # Reads leads from CSV file
 def read_leads_from_csv(file_path):
@@ -109,23 +116,29 @@ def get_dashboard_metrics():
     try:
         cursor.execute("SELECT COUNT(*) FROM leads WHERE status = 'called'")
         called_leads_count = cursor.fetchone()[0]
+        logging.info(f"Called leads count: {called_leads_count}")
+
         cursor.execute("SELECT COUNT(*) FROM leads WHERE status = 'sold/booked'")
         sold_leads_count = cursor.fetchone()[0]
+        logging.info(f"Sold leads count: {sold_leads_count}")
+
         cursor.execute("SELECT COUNT(*) FROM leads")
         total_leads_count = cursor.fetchone()[0]
+        logging.info(f"Total leads count: {total_leads_count}")
+
         cursor.execute("SELECT COUNT(*) FROM leads WHERE status = 'new'")
         uncalled_leads_count = cursor.fetchone()[0]
-        cursor.execute("SELECT AVG(age) FROM leads WHERE age IS NOT NULL")
-        average_age = cursor.fetchone()[0] or 0
+        logging.info(f"Uncalled leads count: {uncalled_leads_count}")
+
         cursor.execute("SELECT COUNT(*) FROM leads WHERE lead_type = 'hot'")
         hot_leads_count = cursor.fetchone()[0]
+        logging.info(f"Hot leads count: {hot_leads_count}")
 
         return jsonify({
             "called_leads_count": called_leads_count,
             "sold_leads_count": sold_leads_count,
             "total_leads_count": total_leads_count,
             "uncalled_leads_count": uncalled_leads_count,
-            "average_age": round(average_age, 1),
             "hot_leads_count": hot_leads_count
         })
     finally:
@@ -139,8 +152,12 @@ def get_leaderboard():
     try:
         cursor.execute("SELECT agent, COUNT(*) FROM leads WHERE status = 'called' GROUP BY agent")
         leads_called = cursor.fetchall()
+        logging.info(f"Leads called per agent: {leads_called}")
+
         cursor.execute("SELECT agent, sales_count FROM agent_sales")
         sales_data = cursor.fetchall()
+        logging.info(f"Sales data: {sales_data}")
+
         leaderboard = [
             {"agent": agent, "leads_called": called, "sales_count": next((s[1] for s in sales_data if s[0] == agent), 0)}
             for agent, called in leads_called
