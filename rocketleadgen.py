@@ -74,6 +74,9 @@ def setup_database():
     # Update some leads for testing
     cursor.execute("UPDATE leads SET status = 'called', agent = 'Test Agent' WHERE id % 3 = 0")
     cursor.execute("UPDATE leads SET status = 'sold/booked', agent = 'Test Agent' WHERE id % 5 = 0")
+    cursor.execute("UPDATE leads SET lead_type = 'hot' WHERE id % 7 = 0")
+    cursor.execute("UPDATE leads SET gender = CASE WHEN id % 2 = 0 THEN 'Male' ELSE 'Female' END")
+    conn.commit()
 
     # Insert test agent sales
     cursor.execute('''
@@ -142,13 +145,38 @@ def get_dashboard_metrics():
         hot_leads_count = cursor.fetchone()[0]
         logging.info(f"Hot leads count: {hot_leads_count}")
 
+        cursor.execute("SELECT zip_code, COUNT(*) AS zip_count FROM leads GROUP BY zip_code ORDER BY zip_count DESC LIMIT 1")
+        popular_zip = cursor.fetchone()
+        popular_zip = popular_zip[0] if popular_zip else "N/A"
+        logging.info(f"Most popular zip code: {popular_zip}")
+
+        cursor.execute("SELECT gender, COUNT(*) AS gender_count FROM leads GROUP BY gender ORDER BY gender_count DESC LIMIT 1")
+        popular_gender = cursor.fetchone()
+        popular_gender = popular_gender[0] if popular_gender else "N/A"
+        logging.info(f"Most popular gender: {popular_gender}")
+
+        cursor.execute("SELECT strftime('%H', created_at) AS hour, COUNT(*) FROM leads GROUP BY hour ORDER BY COUNT(*) DESC LIMIT 1")
+        hottest_time = cursor.fetchone()
+        if hottest_time:
+            hottest_time = f"{int(hottest_time[0])}:00 - {int(hottest_time[0]) + 1}:00"
+        else:
+            hottest_time = "N/A"
+        logging.info(f"Hottest time of day: {hottest_time}")
+
+        closed_percentage = (sold_leads_count / total_leads_count * 100) if total_leads_count > 0 else 0
+        logging.info(f"Closing percentage: {closed_percentage}")
+
         return jsonify({
             "called_leads_count": called_leads_count,
             "sold_leads_count": sold_leads_count,
             "total_leads_count": total_leads_count,
             "uncalled_leads_count": uncalled_leads_count,
             "average_age": round(average_age, 1),
-            "hot_leads_count": hot_leads_count
+            "hot_leads_count": hot_leads_count,
+            "popular_zip": popular_zip,
+            "popular_gender": popular_gender,
+            "hottest_time": hottest_time,
+            "closed_percentage": round(closed_percentage, 2)
         })
     finally:
         conn.close()
