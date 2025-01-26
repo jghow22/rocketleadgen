@@ -32,7 +32,7 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 @app.route('/generate-token', methods=['GET'])
 def generate_token():
     agent_name = request.args.get("agent_name")
-    logging.info(f"Received token request for agent: {agent_name}")
+    logging.info(f"Token request received for agent: {agent_name}")
 
     if not agent_name:
         logging.error("Agent name is required.")
@@ -54,15 +54,11 @@ def generate_token():
 @app.route('/handle-call', methods=['POST'])
 def handle_call():
     response = VoiceResponse()
-
-    # Get the caller's number
     caller = request.form.get("From")
     logging.info(f"Incoming call from: {caller}")
 
-    # Add a simple message for the caller
-    response.say("Thank you for calling. Please wait while we connect you.")
-
-    # Dial a fixed phone number directly
+    # Simple message and direct dial
+    response.say("Connecting your call now.")
     response.dial(TWILIO_PHONE_NUMBER)
 
     # Return valid TwiML
