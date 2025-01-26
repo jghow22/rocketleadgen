@@ -1,13 +1,10 @@
 import discord
-from discord.ext import commands, tasks
+from discord.ext import commands
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 import logging
-import sqlite3
 import os
-from datetime import datetime
 from threading import Thread
-from twilio.rest import Client
 from twilio.jwt.client import ClientCapabilityToken
 from twilio.twiml.voice_response import VoiceResponse
 
@@ -21,7 +18,6 @@ TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
 TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
 TWILIO_PHONE_NUMBER = os.getenv('TWILIO_PHONE_NUMBER')
 TWIML_APP_SID = "AP3e887681a7ea924ad732e46b00cd04c4"  # TwiML Application SID
-DB_PATH = 'leads.db'
 
 # Initialize Flask app and set CORS
 app = Flask(__name__)
@@ -31,23 +27,6 @@ CORS(app)
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
-
-# Database setup
-def setup_database():
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS leads (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT,
-            phone TEXT,
-            status TEXT DEFAULT 'new',
-            notes TEXT
-        )
-    ''')
-    conn.commit()
-    conn.close()
-    logging.info("Database setup completed.")
 
 # API: Generate Twilio Capability Token
 @app.route('/generate-token', methods=['GET'])
@@ -62,7 +41,7 @@ def generate_token():
     try:
         capability = ClientCapabilityToken(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
         capability.allow_client_incoming(agent_name)
-        capability.allow_client_outgoing(TWIML_APP_SID)  # Use TwiML App SID
+        capability.allow_client_outgoing(TWIML_APP_SID)
         token = capability.to_jwt()
 
         logging.info(f"Generated token for agent: {agent_name}")
@@ -75,20 +54,18 @@ def generate_token():
 @app.route('/handle-call', methods=['POST'])
 def handle_call():
     response = VoiceResponse()
-    caller = request.form.get("From")  # Caller phone number
-    agent_name = request.form.get("agent_name")
 
+    # Get the caller's number
+    caller = request.form.get("From")
     logging.info(f"Incoming call from: {caller}")
-    logging.info(f"Routing to agent: {agent_name}")
 
-    if agent_name:
-        response.dial().client(agent_name)
-        logging.info(f"Routing call to agent: {agent_name}")
-    else:
-        response.say("We are sorry, but there was an error with this call. Please try again later.")
-        logging.warning("No agent name provided, or an error occurred.")
+    # Add a simple message for the caller
+    response.say("Thank you for calling. Please wait while we connect you.")
 
-    # Explicitly set the Content-Type to application/xml
+    # Dial a fixed phone number directly
+    response.dial(TWILIO_PHONE_NUMBER)
+
+    # Return valid TwiML
     return Response(str(response), content_type="application/xml")
 
 # Discord bot ready event
@@ -105,7 +82,6 @@ def run_discord_bot():
     bot.run(DISCORD_TOKEN)
 
 if __name__ == '__main__':
-    setup_database()
     flask_thread = Thread(target=run_flask_app)
     flask_thread.start()
     run_discord_bot()
