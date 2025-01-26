@@ -85,10 +85,11 @@ def handle_call():
         response.dial().client(agent_name)
         logging.info(f"Routing call to agent: {agent_name}")
     else:
-        response.say("No agent is available to take your call.")
-        logging.warning("No agent available to handle the call.")
+        response.say("We are sorry, but there was an error with this call. Please try again later.")
+        logging.warning("No agent name provided, or an error occurred.")
 
-    return str(response)
+    # Explicitly set the Content-Type to application/xml
+    return Response(str(response), content_type="application/xml")
 
 # Discord bot ready event
 @bot.event
