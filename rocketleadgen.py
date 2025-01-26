@@ -22,6 +22,7 @@ DISCORD_CHANNEL_ID = int(os.getenv('DISCORD_CHANNEL_ID'))
 TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
 TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
 TWILIO_PHONE_NUMBER = os.getenv('TWILIO_PHONE_NUMBER')
+TWLML_APP_SID = "AP3e887681a7ea924ad732e46b00cd04c4"  # TwiML Application SID
 CSV_FILE_PATH = 'leadslistseptwenty.csv'
 DB_PATH = 'leads.db'
 
@@ -58,35 +59,23 @@ def setup_database():
     conn.close()
     logging.info("Database setup completed.")
 
-# Reads leads from CSV file
-def read_leads_from_csv(file_path):
-    try:
-        df = pd.read_csv(file_path)
-        logging.info(f"Loaded {len(df)} leads from CSV.")
-        required_columns = ['FirstName', 'LastName', 'Phone', 'Gender', 'Age', 'Zip']
-        if not all(column in df.columns for column in required_columns):
-            logging.error(f"CSV file is missing required columns. Expected: {required_columns}")
-            return None
-        df['Name'] = df['FirstName'] + ' ' + df['LastName']
-        df = df.rename(columns={'Zip': 'Zip Code'})[['Name', 'Phone', 'Gender', 'Age', 'Zip Code']]
-        return df
-    except Exception as e:
-        logging.error(f"Failed to read CSV: {e}")
-        return None
-
 # API: Generate Twilio Capability Token
 @app.route('/generate-token', methods=['GET'])
 def generate_token():
     agent_name = request.args.get("agent_name")
+    logging.info(f"Received token request for agent: {agent_name}")
+
     if not agent_name:
+        logging.error("Agent name is required.")
         return jsonify({"error": "Agent name is required"}), 400
 
     try:
         capability = ClientCapabilityToken(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
         capability.allow_client_incoming(agent_name)
-        capability.allow_client_outgoing("your_twiml_application_sid")  # Replace with TwiML App SID
+        capability.allow_client_outgoing(TWLML_APP_SID)  # Use the TwiML Application SID
         token = capability.to_jwt()
 
+        logging.info(f"Generated token for agent: {agent_name}")
         return jsonify({"token": token}), 200
     except Exception as e:
         logging.error(f"Error generating token: {e}")
@@ -96,90 +85,25 @@ def generate_token():
 @app.route('/handle-call', methods=['POST'])
 def handle_call():
     response = VoiceResponse()
+    caller = request.form.get("From")  # Caller phone number
     agent_name = request.form.get("agent_name")
+
+    logging.info(f"Incoming call from: {caller}")
+    logging.info(f"Routing to agent: {agent_name}")
 
     if agent_name:
         response.dial().client(agent_name)
+        logging.info(f"Routing call to agent: {agent_name}")
     else:
         response.say("No agent is available to take your call.")
+        logging.warning("No agent available to handle the call.")
 
     return str(response)
-
-# API: Update Lead Status
-@app.route('/update-lead-status', methods=['POST'])
-def update_lead_status():
-    data = request.json
-    lead_id = data.get("lead_id")
-    status = data.get("status")
-    notes = data.get("notes", "")
-
-    if not lead_id or not status:
-        return jsonify({"error": "Missing lead_id or status"}), 400
-
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    try:
-        cursor.execute(
-            "UPDATE leads SET status = ?, notes = ? WHERE id = ?",
-            (status, notes, lead_id)
-        )
-        conn.commit()
-        return jsonify({"message": "Lead status updated"}), 200
-    except Exception as e:
-        logging.error(f"Error updating lead status: {e}")
-        return jsonify({"error": str(e)}), 500
-    finally:
-        conn.close()
 
 # Discord bot ready event
 @bot.event
 async def on_ready():
     logging.info(f'Logged in as {bot.user} (ID: {bot.user.id})')
-
-# Twilio: Initiate Call Transfer
-def initiate_call_transfer(lead_phone, target_phone):
-    client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-    try:
-        call = client.calls.create(
-            to=target_phone,
-            from_=TWILIO_PHONE_NUMBER,
-            url=f"https://your-backend-url.com/voice/{lead_phone}"
-        )
-        logging.info(f"Call initiated. SID: {call.sid}")
-        return {"success": True, "call_sid": call.sid}
-    except Exception as e:
-        logging.error(f"Failed to initiate call: {e}")
-        return {"success": False, "error": str(e)}
-
-# API: Initiate Call Transfer
-@app.route('/transfer-call', methods=['POST'])
-def transfer_call():
-    data = request.json
-    lead_id = data.get('lead_id')
-    target_phone = data.get('target_phone')
-
-    if not lead_id or not target_phone:
-        return jsonify({"error": "Missing lead_id or target_phone"}), 400
-
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    try:
-        cursor.execute("SELECT phone, name FROM leads WHERE id = ?", (lead_id,))
-        lead = cursor.fetchone()
-        if not lead:
-            return jsonify({"error": "Lead not found"}), 404
-
-        lead_phone, lead_name = lead
-        result = initiate_call_transfer(lead_phone, target_phone)
-
-        if result["success"]:
-            cursor.execute("UPDATE leads SET call_in_progress = 1 WHERE id = ?", (lead_id,))
-            conn.commit()
-            return jsonify({"message": "Call transfer initiated", "call_sid": result["call_sid"]}), 200
-        else:
-            return jsonify({"error": result["error"]}), 500
-    finally:
-        conn.close()
 
 # Run Flask app
 def run_flask_app():
