@@ -39,6 +39,10 @@ def generate_token():
         return jsonify({"error": "Agent name is required"}), 400
 
     try:
+        logging.info(f"TWILIO_ACCOUNT_SID: {TWILIO_ACCOUNT_SID}")
+        logging.info(f"TWILIO_AUTH_TOKEN: {TWILIO_AUTH_TOKEN}")
+        logging.info(f"TWIML_APP_SID: {TWIML_APP_SID}")
+
         capability = ClientCapabilityToken(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
         capability.allow_client_incoming(agent_name)
         capability.allow_client_outgoing(TWIML_APP_SID)
@@ -57,12 +61,16 @@ def handle_call():
     caller = request.form.get("From")
     logging.info(f"Incoming call from: {caller}")
 
-    # Simple message and direct dial
-    response.say("Connecting your call now.")
-    response.dial(TWILIO_PHONE_NUMBER)
+    try:
+        response.say("Connecting your call now.")
+        response.dial(TWILIO_PHONE_NUMBER)
 
-    # Return valid TwiML
-    return Response(str(response), content_type="application/xml")
+        logging.info("Successfully generated TwiML for the call.")
+        return Response(str(response), content_type="application/xml")
+    except Exception as e:
+        logging.error(f"Error handling call: {e}")
+        response.say("An error occurred while processing your call. Please try again later.")
+        return Response(str(response), content_type="application/xml")
 
 # Discord bot ready event
 @bot.event
