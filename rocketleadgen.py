@@ -57,11 +57,12 @@ def generate_token():
 # API: TwiML for handling calls
 @app.route('/handle-call', methods=['POST'])
 def handle_call():
-    response = VoiceResponse()
-    caller = request.form.get("From")
-    logging.info(f"Incoming call from: {caller}")
-
     try:
+        response = VoiceResponse()
+        caller = request.form.get("From")
+        logging.info(f"Incoming call from: {caller}")
+
+        # Add a voice message and dial action
         response.say("Connecting your call now.")
         response.dial(TWILIO_PHONE_NUMBER)
 
@@ -69,8 +70,11 @@ def handle_call():
         return Response(str(response), content_type="application/xml")
     except Exception as e:
         logging.error(f"Error handling call: {e}")
-        response.say("An error occurred while processing your call. Please try again later.")
-        return Response(str(response), content_type="application/xml")
+
+        # Return an error response in TwiML
+        error_response = VoiceResponse()
+        error_response.say("An error occurred while processing your call. Please try again later.")
+        return Response(str(error_response), content_type="application/xml")
 
 # Discord bot ready event
 @bot.event
