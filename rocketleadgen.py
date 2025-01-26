@@ -39,10 +39,6 @@ def generate_token():
         return jsonify({"error": "Agent name is required"}), 400
 
     try:
-        logging.info(f"TWILIO_ACCOUNT_SID: {TWILIO_ACCOUNT_SID}")
-        logging.info(f"TWILIO_AUTH_TOKEN: {TWILIO_AUTH_TOKEN}")
-        logging.info(f"TWIML_APP_SID: {TWIML_APP_SID}")
-
         capability = ClientCapabilityToken(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
         capability.allow_client_incoming(agent_name)
         capability.allow_client_outgoing(TWIML_APP_SID)
