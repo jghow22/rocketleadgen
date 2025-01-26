@@ -5,10 +5,8 @@ from flask_cors import CORS
 import logging
 import sqlite3
 import os
-from datetime import datetime, timedelta
-import pandas as pd
+from datetime import datetime
 from threading import Thread
-import asyncio
 from twilio.rest import Client
 from twilio.jwt.client import ClientCapabilityToken
 from twilio.twiml.voice_response import VoiceResponse
@@ -22,8 +20,7 @@ DISCORD_CHANNEL_ID = int(os.getenv('DISCORD_CHANNEL_ID'))
 TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
 TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
 TWILIO_PHONE_NUMBER = os.getenv('TWILIO_PHONE_NUMBER')
-TWLML_APP_SID = "AP3e887681a7ea924ad732e46b00cd04c4"  # TwiML Application SID
-CSV_FILE_PATH = 'leadslistseptwenty.csv'
+TWIML_APP_SID = "AP3e887681a7ea924ad732e46b00cd04c4"  # TwiML Application SID
 DB_PATH = 'leads.db'
 
 # Initialize Flask app and set CORS
@@ -42,16 +39,9 @@ def setup_database():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS leads (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            discord_message_id INTEGER UNIQUE,
             name TEXT,
             phone TEXT,
-            gender TEXT,
-            age INTEGER,
-            zip_code TEXT,
             status TEXT DEFAULT 'new',
-            lead_type TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            agent TEXT,
             notes TEXT
         )
     ''')
@@ -72,7 +62,7 @@ def generate_token():
     try:
         capability = ClientCapabilityToken(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
         capability.allow_client_incoming(agent_name)
-        capability.allow_client_outgoing(TWLML_APP_SID)  # Use the TwiML Application SID
+        capability.allow_client_outgoing(TWIML_APP_SID)  # Use TwiML App SID
         token = capability.to_jwt()
 
         logging.info(f"Generated token for agent: {agent_name}")
