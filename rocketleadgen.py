@@ -1,3 +1,5 @@
+# Python Server Code (Flask + Discord)
+# -------------------------------------
 import discord
 from discord.ext import commands
 from flask import Flask, request, jsonify, Response
@@ -17,18 +19,18 @@ DISCORD_CHANNEL_ID = int(os.getenv('DISCORD_CHANNEL_ID'))
 TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
 TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
 TWILIO_PHONE_NUMBER = os.getenv('TWILIO_PHONE_NUMBER')
-TWIML_APP_SID = "AP3e887681a7ea924ad732e46b00cd04c4"  # TwiML Application SID
+TWIML_APP_SID = "AP3e887681a7ea924ad732e46b00cd04c4"  # Replace with your actual TwiML App SID
 
-# Initialize Flask app and set CORS
+# Initialize Flask app and enable CORS
 app = Flask(__name__)
 CORS(app)
 
-# Initialize Discord bot
+# Initialize Discord bot (for notifications, logging, etc.)
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# API: Generate Twilio Capability Token
+# API Endpoint: Generate Twilio Capability Token
 @app.route('/generate-token', methods=['GET'])
 def generate_token():
     agent_name = request.args.get("agent_name")
@@ -50,7 +52,7 @@ def generate_token():
         logging.error(f"Error generating token: {e}")
         return jsonify({"error": str(e)}), 500
 
-# API: TwiML for handling calls
+# API Endpoint: Provide TwiML to handle incoming calls
 @app.route('/handle-call', methods=['POST'])
 def handle_call():
     try:
@@ -58,7 +60,7 @@ def handle_call():
         caller = request.form.get("From")
         logging.info(f"Incoming call from: {caller}")
 
-        # Add a voice message and dial action
+        # Respond with a voice message and dial action
         response.say("Connecting your call now.")
         response.dial(TWILIO_PHONE_NUMBER)
 
@@ -66,25 +68,25 @@ def handle_call():
         return Response(str(response), content_type="application/xml")
     except Exception as e:
         logging.error(f"Error handling call: {e}")
-
-        # Return an error response in TwiML
+        # Provide a TwiML error response
         error_response = VoiceResponse()
         error_response.say("An error occurred while processing your call. Please try again later.")
         return Response(str(error_response), content_type="application/xml")
 
-# Discord bot ready event
+# Discord bot event: on ready
 @bot.event
 async def on_ready():
     logging.info(f'Logged in as {bot.user} (ID: {bot.user.id})')
 
-# Run Flask app
+# Function to run the Flask app in a separate thread
 def run_flask_app():
     app.run(host='0.0.0.0', port=10000)
 
-# Run Discord bot
+# Function to run the Discord bot
 def run_discord_bot():
     bot.run(DISCORD_TOKEN)
 
+# Entry point: start both Flask and Discord bot concurrently
 if __name__ == '__main__':
     flask_thread = Thread(target=run_flask_app)
     flask_thread.start()
