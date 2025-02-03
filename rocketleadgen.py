@@ -49,7 +49,7 @@ def generate_token():
         logging.error(f"Error generating token: {e}")
         return jsonify({"error": str(e)}), 500
 
-# API: TwiML for handling calls (Updated to route call to a client)
+# API: TwiML for handling calls (routes call to client "Agent1")
 @app.route('/handle-call', methods=['POST'])
 def handle_call():
     try:
@@ -57,7 +57,7 @@ def handle_call():
         caller = request.form.get("From")
         logging.info(f"Incoming call from: {caller}")
 
-        # Dial the client with the identifier "Agent1"
+        # Route the call to the client with identifier "Agent1"
         dial = response.dial()
         dial.client("Agent1")  # Ensure this matches the agent name used in token generation
 
