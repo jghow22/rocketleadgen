@@ -22,27 +22,19 @@ TWIML_APP_SID = "AP3e887681a7ea924ad732e46b00cd04c4"  # TwiML Application SID
 app = Flask(__name__)
 CORS(app)
 
-# Initialize Discord bot
-intents = discord.Intents.default()
-intents.message_content = True
-bot = commands.Bot(command_prefix="!", intents=intents)
-
 # API: Generate Twilio Capability Token
 @app.route('/generate-token', methods=['GET'])
 def generate_token():
     agent_name = request.args.get("agent_name")
     logging.info(f"Token request received for agent: {agent_name}")
-
     if not agent_name:
         logging.error("Agent name is required.")
         return jsonify({"error": "Agent name is required"}), 400
-
     try:
         capability = ClientCapabilityToken(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
         capability.allow_client_incoming(agent_name)
         capability.allow_client_outgoing(TWIML_APP_SID)
         token = capability.to_jwt()
-
         logging.info(f"Generated token for agent: {agent_name}")
         return jsonify({"token": token}), 200
     except Exception as e:
@@ -56,11 +48,9 @@ def handle_call():
         response = VoiceResponse()
         caller = request.form.get("From")
         logging.info(f"Incoming call from: {caller}")
-
         # Route the call to the client with identifier "Agent1"
         dial = response.dial()
         dial.client("Agent1")  # Ensure this matches the agent name used in token generation
-
         logging.info("Successfully generated TwiML for the call.")
         return Response(str(response), content_type="application/xml")
     except Exception as e:
