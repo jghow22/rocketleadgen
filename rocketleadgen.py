@@ -22,7 +22,7 @@ TWIML_APP_SID = "AP3e887681a7ea924ad732e46b00cd04c4"  # TwiML Application SID
 app = Flask(__name__)
 CORS(app)
 
-# Initialize Discord bot BEFORE any usage.
+# Initialize Discord bot
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
