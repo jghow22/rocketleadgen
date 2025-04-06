@@ -42,6 +42,7 @@ def generate_token():
         capability.allow_client_incoming(agent_name)
         capability.allow_client_outgoing(TWIML_APP_SID)
         token = capability.to_jwt()
+
         logging.info(f"Generated token for agent: {agent_name}")
         return jsonify({"token": token}), 200
     except Exception as e:
@@ -55,8 +56,11 @@ def handle_call():
         response = VoiceResponse()
         caller = request.form.get("From")
         logging.info(f"Incoming call from: {caller}")
+
+        # Route the call to the client with identifier "Agent1"
         dial = response.dial()
         dial.client("Agent1")  # Must match the agent name used in token generation
+
         logging.info("Successfully generated TwiML for the call.")
         return Response(str(response), content_type="application/xml")
     except Exception as e:
