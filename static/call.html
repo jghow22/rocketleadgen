@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Live Transfer Call</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' https://media.twiliocdn.com https://sdk.twilio.com; script-src 'self' https://media.twiliocdn.com https://sdk.twilio.com;">
+  <script src="https://media.twiliocdn.com/sdk/js/client/v1.13/twilio.min.js"></script>
+  <style>
+    body { font-family: sans-serif; padding: 5px; background: #f9f9f9; }
+    button { margin: 5px; padding: 10px; }
+  </style>
+</head>
+<body>
+  <h2>Live Transfer Call</h2>
+  <div id="status">Initializing...</div>
+  <div id="controls" style="margin-top:20px; display: none;">
+    <button id="answerCall">Answer Call</button>
+    <button id="rejectCall">Reject Call</button>
+  </div>
+  <script>
+    // Define the agent name; modify if needed.
+    const agent = "Agent1";
+    
+    // Fetch the Twilio token from the backend.
+    fetch(`https://rocketsoftwares.onrender.com/generate-token?agent_name=${agent}`)
+      .then(response => response.json())
+      .then(data => {
+        if (data.error) {
+          document.getElementById('status').textContent = 'Error: ' + data.error;
+        } else {
+          const token = data.token;
+          window.twilioDevice = new Twilio.Device(token, { debug: true });
+          window.twilioDevice.on('ready', function() {
+            document.getElementById('status').textContent = 'Twilio Device is ready.';
+          });
+          window.twilioDevice.on('incoming', function(call) {
+            window.currentCall = call;
+            document.getElementById('status').textContent = 'Incoming call from ' + call.parameters.From;
+            document.getElementById('controls').style.display = 'block';
+          });
+          window.twilioDevice.on('error', function(error) {
+            document.getElementById('status').textContent = 'Twilio error: ' + error.message;
+          });
+        }
+      })
+      .catch(err => {
+        console.error('Error fetching token:', err);
+        document.getElementById('status').textContent = 'Error fetching token.';
+      });
+
+    // Set up handlers for answering and rejecting calls.
+    document.getElementById('answerCall').addEventListener('click', () => {
+      if (window.currentCall) {
+        window.currentCall.accept();
+        document.getElementById('status').textContent = 'Call answered.';
+      }
+    });
+    document.getElementById('rejectCall').addEventListener('click', () => {
+      if (window.currentCall) {
+        window.currentCall.reject();
+        window.currentCall = null;
+        document.getElementById('status').textContent = 'Call rejected.';
+        document.getElementById('controls').style.display = 'none';
+      }
+    });
+  </script>
+</body>
+</html>
