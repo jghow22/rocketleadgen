@@ -18,7 +18,7 @@
       <button id="rejectCall">Reject Call</button>
     </div>
     <script>
-      // Set status to initializing (no MediaDevices check)
+      // Set initial status
       document.getElementById('status').textContent = "Initializing...";
 
       // Fetch the Twilio token and initialize the device
@@ -49,7 +49,7 @@
           document.getElementById('status').textContent = 'Error fetching token.';
         });
 
-      // Set up event listeners for call controls
+      // Event listeners for call controls
       document.getElementById('answerCall').addEventListener('click', () => {
         if (window.currentCall) {
           window.currentCall.accept();
