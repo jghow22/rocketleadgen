@@ -1,6 +1,6 @@
 import discord
 from discord.ext import commands
-from flask import Flask, request, jsonify, Response, send_from_directory
+from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 import logging
 import os
@@ -18,8 +18,8 @@ TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
 TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
 TWIML_APP_SID = "AP3e887681a7ea924ad732e46b00cd04c4"  # TwiML Application SID
 
-# Initialize Flask app and set CORS
-app = Flask(__name__)
+# Initialize Flask app and set CORS; note that Flask automatically serves static files
+app = Flask(__name__, static_folder='static')
 CORS(app)
 
 # Initialize Discord bot
@@ -63,11 +63,10 @@ def handle_call():
         error_response.say("An error occurred while processing your call. Please try again later.")
         return Response(str(error_response), content_type="application/xml")
 
-# Updated /call-page route using an absolute path to the static folder
+# Serve the standalone call page from the static folder
 @app.route('/call-page', methods=['GET'])
 def call_page():
-    static_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
-    return send_from_directory(static_folder, 'call.html')
+    return app.send_static_file("call.html")
 
 @bot.event
 async def on_ready():
