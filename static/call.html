@@ -18,12 +18,8 @@
       <button id="rejectCall">Reject Call</button>
     </div>
     <script>
-      // Check if MediaDevices API is available
-      if (!navigator.mediaDevices) {
-        document.getElementById('status').textContent = "MediaDevices API not supported in this browser.";
-      } else {
-        document.getElementById('status').textContent = "MediaDevices API is supported.";
-      }
+      // Set status to initializing (no MediaDevices check)
+      document.getElementById('status').textContent = "Initializing...";
 
       // Fetch the Twilio token and initialize the device
       const agent = "Agent1";
