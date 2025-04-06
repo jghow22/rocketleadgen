@@ -18,7 +18,7 @@
       <button id="rejectCall">Reject Call</button>
     </div>
     <script>
-      // Check for MediaDevices API support
+      // Check if MediaDevices API is available
       if (!navigator.mediaDevices) {
         document.getElementById('status').textContent = "MediaDevices API not supported in this browser.";
       } else {
