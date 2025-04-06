@@ -1,6 +1,6 @@
 import os
 import logging
-from flask import Flask, request, jsonify, Response, send_from_directory
+from flask import Flask, jsonify, send_from_directory, Response
 from flask_cors import CORS
 from twilio.jwt.client import ClientCapabilityToken
 from twilio.twiml.voice_response import VoiceResponse
@@ -17,17 +17,17 @@ TWIML_APP_SID = "AP3e887681a7ea924ad732e46b00cd04c4"  # TwiML Application SID
 app = Flask(__name__, static_folder='static')
 CORS(app)
 
-# Simple index route for testing
 @app.route('/', methods=['GET'])
 def index():
     return "Rocket Lead Gen API is running."
 
-# Debug endpoint to list files in the static folder
+# Debug endpoint: list files in the static folder
 @app.route('/debug-static', methods=['GET'])
 def debug_static():
     static_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
     try:
         files = os.listdir(static_folder)
+        logging.info("Files in static folder: " + str(files))
         return jsonify({"files": files})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -35,7 +35,7 @@ def debug_static():
 # Endpoint: Generate Twilio Capability Token
 @app.route('/generate-token', methods=['GET'])
 def generate_token():
-    agent_name = request.args.get("agent_name")
+    agent_name = str(request.args.get("agent_name"))
     logging.info(f"Token request received for agent: {agent_name}")
     if not agent_name:
         logging.error("Agent name is required.")
@@ -59,7 +59,7 @@ def handle_call():
         caller = request.form.get("From")
         logging.info(f"Incoming call from: {caller}")
         dial = response.dial()
-        dial.client("Agent1")  # Ensure this matches your desired agent name
+        dial.client("Agent1")
         logging.info("Successfully generated TwiML for the call.")
         return Response(str(response), content_type="application/xml")
     except Exception as e:
