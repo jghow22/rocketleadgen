@@ -49,7 +49,7 @@
           document.getElementById('status').textContent = 'Error fetching token.';
         });
 
-      // Event listeners for call controls
+      // Set up event listeners for call controls
       document.getElementById('answerCall').addEventListener('click', () => {
         if (window.currentCall) {
           window.currentCall.accept();
