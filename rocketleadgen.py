@@ -63,10 +63,11 @@ def handle_call():
         error_response.say("An error occurred while processing your call. Please try again later.")
         return Response(str(error_response), content_type="application/xml")
 
-# Serve the standalone call page
+# Updated /call-page route using an absolute path to the static folder
 @app.route('/call-page', methods=['GET'])
 def call_page():
-    return send_from_directory(directory='static', filename='call.html')
+    static_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
+    return send_from_directory(static_folder, 'call.html')
 
 @bot.event
 async def on_ready():
