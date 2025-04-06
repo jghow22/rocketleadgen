@@ -17,10 +17,20 @@ TWIML_APP_SID = "AP3e887681a7ea924ad732e46b00cd04c4"  # TwiML Application SID
 app = Flask(__name__, static_folder='static')
 CORS(app)
 
-# A simple index route for testing
+# Simple index route for testing
 @app.route('/', methods=['GET'])
 def index():
     return "Rocket Lead Gen API is running."
+
+# Debug endpoint to list files in the static folder
+@app.route('/debug-static', methods=['GET'])
+def debug_static():
+    static_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
+    try:
+        files = os.listdir(static_folder)
+        return jsonify({"files": files})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # Endpoint: Generate Twilio Capability Token
 @app.route('/generate-token', methods=['GET'])
@@ -61,7 +71,6 @@ def handle_call():
 # Endpoint: Serve the standalone call page from the static folder
 @app.route('/call-page', methods=['GET'])
 def call_page():
-    # Build the absolute path for the static folder
     static_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
     logging.info("Static folder path: " + static_folder)
     file_path = os.path.join(static_folder, "call.html")
