@@ -1,6 +1,6 @@
 import os
 import logging
-from flask import Flask, jsonify, send_from_directory, Response
+from flask import Flask, request, jsonify, Response, send_file
 from flask_cors import CORS
 from twilio.jwt.client import ClientCapabilityToken
 from twilio.twiml.voice_response import VoiceResponse
@@ -17,6 +17,7 @@ TWIML_APP_SID = "AP3e887681a7ea924ad732e46b00cd04c4"  # TwiML Application SID
 app = Flask(__name__, static_folder='static')
 CORS(app)
 
+# Simple index route for testing
 @app.route('/', methods=['GET'])
 def index():
     return "Rocket Lead Gen API is running."
@@ -72,12 +73,14 @@ def handle_call():
 @app.route('/call-page', methods=['GET'])
 def call_page():
     static_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
-    logging.info("Static folder path: " + static_folder)
     file_path = os.path.join(static_folder, "call.html")
-    if not os.path.exists(file_path):
+    logging.info("Looking for call.html at: " + file_path)
+    if os.path.exists(file_path):
+        logging.info("Found call.html, sending file.")
+        return send_file(file_path)
+    else:
         logging.error("call.html not found in static folder: " + static_folder)
         return "call.html not found", 404
-    return send_from_directory(static_folder, 'call.html')
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
