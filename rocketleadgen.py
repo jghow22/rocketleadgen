@@ -1,6 +1,6 @@
 import discord
 from discord.ext import commands
-from flask import Flask, request, jsonify, Response
+from flask import Flask, request, jsonify, Response, send_from_directory
 from flask_cors import CORS
 import logging
 import os
@@ -62,6 +62,11 @@ def handle_call():
         error_response = VoiceResponse()
         error_response.say("An error occurred while processing your call. Please try again later.")
         return Response(str(error_response), content_type="application/xml")
+
+# Serve the standalone call page
+@app.route('/call-page', methods=['GET'])
+def call_page():
+    return send_from_directory(directory='static', filename='call.html')
 
 @bot.event
 async def on_ready():
