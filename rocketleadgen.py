@@ -1,10 +1,12 @@
 import os
 import logging
-from typing import Dict, Union, Tuple, Any, Optional
+import json
+from typing import Dict, Union, Tuple, Any, Optional, List
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 from twilio.jwt.client import ClientCapabilityToken
 from twilio.twiml.voice_response import VoiceResponse
+from twilio.rest import Client
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -14,6 +16,9 @@ TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
 TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
 TWIML_APP_SID = "AP3e887681a7ea924ad732e46b00cd04c4"  # TwiML Application SID
 
+# In-memory storage for active calls (replace with database in production)
+active_calls = {}
+
 class RocketLeadGenAPI:
     """Lead generation system API for life insurance agents with Twilio integration."""
     
@@ -21,6 +26,14 @@ class RocketLeadGenAPI:
         """Initialize the Flask application with CORS support."""
         self.app = Flask(__name__)
         CORS(self.app)
+        
+        # Initialize Twilio client for API operations
+        if TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN:
+            self.twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+        else:
+            logging.warning("Twilio credentials not set. API operations will not work.")
+            self.twilio_client = None
+            
         self._register_routes()
     
     def _register_routes(self) -> None:
@@ -82,19 +95,23 @@ class RocketLeadGenAPI:
             
             logging.info(f"Incoming call from: {caller} with SID: {call_sid}")
             
-            # Store call information for agents to see (in a real system, use a database)
-            # For now we'll use a simple response that can be consumed by your UI
+            # Store call information
+            active_calls[call_sid] = {
+                "call_sid": call_sid,
+                "caller": caller,
+                "status": "ringing",
+                "timestamp": request.form.get("Timestamp", "")
+            }
             
             # Add a welcome message and wait for an agent to pick up
             response.say("Thank you for calling Rocket Lead Gen. Please hold while we connect you with an agent.")
             response.pause(length=2)
-            # You can add hold music here
-            # response.play("https://your-music-url.mp3")
             
-            # For now, we'll connect to "Agent1" but in a real system, 
-            # you'd want to implement logic to find available agents
-            dial = response.dial(callerId=caller)
-            dial.client("Agent1")
+            # Hold music
+            response.play("https://demo.twilio.com/docs/classic.mp3")
+            
+            # For now, we'll wait for an agent to explicitly pick up
+            # This is different from the original code where we automatically dialed Agent1
             
             logging.info("Successfully generated TwiML for the call.")
             return Response(str(response), content_type="application/xml")
@@ -114,7 +131,14 @@ class RocketLeadGenAPI:
         call_status = request.form.get("CallStatus")
         logging.info(f"Call status update for SID {call_sid}: {call_status}")
         
-        # In a real application, you'd update a database with this information
+        # Update call status in our storage
+        if call_sid in active_calls:
+            active_calls[call_sid]["status"] = call_status
+            
+            # Remove completed/failed calls from active calls list
+            if call_status in ["completed", "failed", "busy", "no-answer", "canceled"]:
+                active_calls.pop(call_sid, None)
+        
         return Response("", content_type="application/xml")
     
     def get_current_calls(self) -> Tuple[Response, int]:
@@ -123,17 +147,9 @@ class RocketLeadGenAPI:
         Returns:
             tuple: JSON response with calls data and HTTP status code
         """
-        # In a real application, you'd retrieve this from a database
-        # For demo purposes, return mock data
-        mock_calls = [
-            {
-                "call_sid": "CA123456789",
-                "caller": "+1234567890",
-                "status": "ringing",
-                "timestamp": "2023-06-01T10:30:00Z"
-            }
-        ]
-        return jsonify({"calls": mock_calls}), 200
+        # Convert active_calls dictionary to a list
+        calls_list = list(active_calls.values())
+        return jsonify({"calls": calls_list}), 200
     
     def answer_call(self) -> Tuple[Response, int]:
         """Allow an agent to answer a specific call.
@@ -156,12 +172,37 @@ class RocketLeadGenAPI:
         
         logging.info(f"Agent {agent_name} is answering call {call_sid}")
         
-        # In a real application, you'd use Twilio's API to redirect the call to this agent
-        # For now, return a success response
-        return jsonify({
-            "success": True,
-            "message": f"Call {call_sid} connected to {agent_name}"
-        }), 200
+        # Make sure the call exists and is still ringing
+        if call_sid not in active_calls or active_calls[call_sid]["status"] != "ringing":
+            return jsonify({
+                "success": False,
+                "error": "Call not found or no longer ringing"
+            }), 404
+        
+        try:
+            # In a real implementation, we would use Twilio API to redirect the call
+            # For demo purposes, we'll just update our local state
+            active_calls[call_sid]["status"] = "in-progress"
+            active_calls[call_sid]["agent"] = agent_name
+            
+            # If you have Twilio client set up:
+            if self.twilio_client:
+                # Update the call to connect to the agent
+                # This is a simplified example - actual implementation may vary
+                self.twilio_client.calls(call_sid).update(
+                    twiml=f'<Response><Dial><Client>{agent_name}</Client></Dial></Response>'
+                )
+            
+            return jsonify({
+                "success": True,
+                "message": f"Call {call_sid} connected to {agent_name}"
+            }), 200
+        except Exception as e:
+            logging.error(f"Error answering call: {e}")
+            return jsonify({
+                "success": False,
+                "error": str(e)
+            }), 500
     
     def end_call(self) -> Tuple[Response, int]:
         """Allow an agent to end a specific call.
@@ -181,12 +222,30 @@ class RocketLeadGenAPI:
         call_sid = data["call_sid"]
         logging.info(f"Ending call {call_sid}")
         
-        # In a real application, you'd use Twilio's API to end the call
-        # For now, return a success response
-        return jsonify({
-            "success": True,
-            "message": f"Call {call_sid} ended"
-        }), 200
+        if call_sid not in active_calls:
+            return jsonify({
+                "success": False,
+                "error": "Call not found"
+            }), 404
+        
+        try:
+            # In a real implementation, we would use Twilio API to end the call
+            if self.twilio_client:
+                self.twilio_client.calls(call_sid).update(status="completed")
+            
+            # Remove from our active calls
+            active_calls.pop(call_sid, None)
+            
+            return jsonify({
+                "success": True,
+                "message": f"Call {call_sid} ended"
+            }), 200
+        except Exception as e:
+            logging.error(f"Error ending call: {e}")
+            return jsonify({
+                "success": False,
+                "error": str(e)
+            }), 500
     
     def run(self, host: str = '0.0.0.0', port: int = 10000) -> None:
         """Run the Flask application.
