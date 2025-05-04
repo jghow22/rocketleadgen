@@ -25,7 +25,15 @@ class RocketLeadGenAPI:
     def __init__(self) -> None:
         """Initialize the Flask application with CORS support."""
         self.app = Flask(__name__)
-        CORS(self.app)
+        
+        # Enable CORS with more explicit settings
+        CORS(self.app, resources={
+            r"/*": {
+                "origins": "*",
+                "methods": ["GET", "POST", "OPTIONS"],
+                "allow_headers": ["Content-Type", "Authorization"]
+            }
+        })
         
         # Initialize Twilio client for API operations
         if TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN:
@@ -103,15 +111,15 @@ class RocketLeadGenAPI:
                 "timestamp": request.form.get("Timestamp", "")
             }
             
+            # Log the active calls for debugging
+            logging.info(f"Active calls after adding: {json.dumps(active_calls)}")
+            
             # Add a welcome message and wait for an agent to pick up
             response.say("Thank you for calling Rocket Lead Gen. Please hold while we connect you with an agent.")
             response.pause(length=2)
             
             # Hold music
             response.play("https://demo.twilio.com/docs/classic.mp3")
-            
-            # For now, we'll wait for an agent to explicitly pick up
-            # This is different from the original code where we automatically dialed Agent1
             
             logging.info("Successfully generated TwiML for the call.")
             return Response(str(response), content_type="application/xml")
@@ -134,10 +142,15 @@ class RocketLeadGenAPI:
         # Update call status in our storage
         if call_sid in active_calls:
             active_calls[call_sid]["status"] = call_status
+            logging.info(f"Updated call {call_sid} status to {call_status}")
             
             # Remove completed/failed calls from active calls list
             if call_status in ["completed", "failed", "busy", "no-answer", "canceled"]:
                 active_calls.pop(call_sid, None)
+                logging.info(f"Removed call {call_sid} from active calls due to status {call_status}")
+        
+        # Log current active calls
+        logging.info(f"Active calls after status update: {json.dumps(active_calls)}")
         
         return Response("", content_type="application/xml")
     
@@ -149,6 +162,7 @@ class RocketLeadGenAPI:
         """
         # Convert active_calls dictionary to a list
         calls_list = list(active_calls.values())
+        logging.info(f"Current calls request - Returning {len(calls_list)} active calls: {json.dumps(calls_list)}")
         return jsonify({"calls": calls_list}), 200
     
     def answer_call(self) -> Tuple[Response, int]:
@@ -164,7 +178,10 @@ class RocketLeadGenAPI:
             tuple: JSON response with result and HTTP status code
         """
         data = request.get_json()
+        logging.info(f"Answer call request with data: {json.dumps(data)}")
+        
         if not data or "call_sid" not in data or "agent_name" not in data:
+            logging.error("Missing required parameters in answer call request")
             return jsonify({"error": "Missing required parameters"}), 400
             
         call_sid = data["call_sid"]
@@ -173,11 +190,19 @@ class RocketLeadGenAPI:
         logging.info(f"Agent {agent_name} is answering call {call_sid}")
         
         # Make sure the call exists and is still ringing
-        if call_sid not in active_calls or active_calls[call_sid]["status"] != "ringing":
+        if call_sid not in active_calls:
+            logging.error(f"Call {call_sid} not found in active calls")
             return jsonify({
                 "success": False,
-                "error": "Call not found or no longer ringing"
+                "error": "Call not found"
             }), 404
+            
+        if active_calls[call_sid]["status"] != "ringing":
+            logging.error(f"Call {call_sid} is no longer ringing (status: {active_calls[call_sid]['status']})")
+            return jsonify({
+                "success": False,
+                "error": "Call no longer ringing"
+            }), 400
         
         try:
             # In a real implementation, we would use Twilio API to redirect the call
@@ -192,6 +217,7 @@ class RocketLeadGenAPI:
                 self.twilio_client.calls(call_sid).update(
                     twiml=f'<Response><Dial><Client>{agent_name}</Client></Dial></Response>'
                 )
+                logging.info(f"Updated Twilio call {call_sid} to connect to agent {agent_name}")
             
             return jsonify({
                 "success": True,
@@ -216,13 +242,17 @@ class RocketLeadGenAPI:
             tuple: JSON response with result and HTTP status code
         """
         data = request.get_json()
+        logging.info(f"End call request with data: {json.dumps(data)}")
+        
         if not data or "call_sid" not in data:
+            logging.error("Missing call_sid parameter in end call request")
             return jsonify({"error": "Missing call_sid parameter"}), 400
             
         call_sid = data["call_sid"]
         logging.info(f"Ending call {call_sid}")
         
         if call_sid not in active_calls:
+            logging.error(f"Call {call_sid} not found in active calls")
             return jsonify({
                 "success": False,
                 "error": "Call not found"
@@ -232,9 +262,11 @@ class RocketLeadGenAPI:
             # In a real implementation, we would use Twilio API to end the call
             if self.twilio_client:
                 self.twilio_client.calls(call_sid).update(status="completed")
+                logging.info(f"Updated Twilio call {call_sid} status to completed")
             
             # Remove from our active calls
             active_calls.pop(call_sid, None)
+            logging.info(f"Removed call {call_sid} from active calls")
             
             return jsonify({
                 "success": True,
