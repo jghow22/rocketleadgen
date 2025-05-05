@@ -49,6 +49,7 @@ class RocketLeadGenAPI:
     def _register_routes(self) -> None:
         """Register all API endpoints."""
         self.app.route('/', methods=['GET'])(self.index)
+        self.app.route('/simple-test-page', methods=['GET'])(self.simple_test_page)
         self.app.route('/test-connection', methods=['GET'])(self.test_connection)
         self.app.route('/test-connection-jsonp', methods=['GET'])(self.test_connection_jsonp)
         self.app.route('/generate-token', methods=['GET'])(self.generate_token)
@@ -68,6 +69,62 @@ class RocketLeadGenAPI:
             str: Status message
         """
         return "Rocket Lead Gen API is running."
+    
+    def simple_test_page(self) -> str:
+        """A simple test page that directly queries for active calls.
+        
+        Returns:
+            str: HTML page with JavaScript to test the API
+        """
+        calls_list = list(active_calls.values())
+        logging.info(f"Simple test page accessed - current active calls: {len(calls_list)}")
+        
+        html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Call System Test</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 20px; }
+                #result { background: #f0f0f0; padding: 10px; border-radius: 4px; margin-top: 10px; }
+                button { padding: 10px; margin: 5px; cursor: pointer; }
+            </style>
+        </head>
+        <body>
+            <h1>Call System Test</h1>
+            <button id="checkBtn">Check for Active Calls</button>
+            <div id="result">Results will appear here...</div>
+            
+            <script>
+                document.getElementById('checkBtn').addEventListener('click', function() {
+                    const result = document.getElementById('result');
+                    result.innerHTML = 'Checking for calls...';
+                    
+                    // Add a timestamp to prevent caching
+                    fetch('/current-calls?t=' + Date.now(), {
+                        headers: {
+                            'Cache-Control': 'no-cache'
+                        }
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        result.innerHTML = '<h3>Active Calls:</h3><pre>' + JSON.stringify(data, null, 2) + '</pre>';
+                    })
+                    .catch(error => {
+                        result.innerHTML = '<h3>Error:</h3><pre>' + error + '</pre>';
+                    });
+                });
+                
+                // Check automatically when page loads
+                window.onload = function() {
+                    document.getElementById('checkBtn').click();
+                }
+            </script>
+        </body>
+        </html>
+        """
+        
+        return html
     
     def test_connection(self) -> Tuple[Response, int]:
         """Simple endpoint to test frontend to backend communication.
