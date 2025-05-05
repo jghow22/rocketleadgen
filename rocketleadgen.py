@@ -2,8 +2,9 @@ import os
 import logging
 import json
 import datetime
+import time
 from typing import Dict, Union, Tuple, Any, Optional, List
-from flask import Flask, request, jsonify, Response
+from flask import Flask, request, jsonify, Response, stream_with_context
 from flask_cors import CORS
 from twilio.jwt.client import ClientCapabilityToken
 from twilio.twiml.voice_response import VoiceResponse
@@ -49,12 +50,15 @@ class RocketLeadGenAPI:
         """Register all API endpoints."""
         self.app.route('/', methods=['GET'])(self.index)
         self.app.route('/test-connection', methods=['GET'])(self.test_connection)
+        self.app.route('/test-connection-jsonp', methods=['GET'])(self.test_connection_jsonp)
         self.app.route('/generate-token', methods=['GET'])(self.generate_token)
         self.app.route('/handle-call', methods=['POST'])(self.handle_call)
         self.app.route('/call-status', methods=['POST'])(self.call_status)
         self.app.route('/current-calls', methods=['GET'])(self.get_current_calls)
+        self.app.route('/current-calls-jsonp', methods=['GET'])(self.get_current_calls_jsonp)
         self.app.route('/answer-call', methods=['POST'])(self.answer_call)
         self.app.route('/end-call', methods=['POST'])(self.end_call)
+        self.app.route('/call-events', methods=['GET'])(self.call_events)
     
     def index(self) -> str:
         """Simple index route for API status check.
@@ -84,6 +88,24 @@ class RocketLeadGenAPI:
         response.headers.add('Access-Control-Allow-Methods', 'GET')
         
         return response, 200
+    
+    def test_connection_jsonp(self) -> str:
+        """JSONP version of test connection endpoint.
+        
+        Returns:
+            str: JSONP callback with JSON data
+        """
+        timestamp = datetime.datetime.now().isoformat()
+        callback = request.args.get('callback', 'callback')
+        logging.info(f"JSONP test connection endpoint called at {timestamp} with callback {callback}")
+        
+        data = {
+            "status": "ok",
+            "message": "Backend is reachable via JSONP",
+            "timestamp": timestamp
+        }
+        
+        return f"{callback}({json.dumps(data)});"
     
     def generate_token(self) -> Tuple[Response, int]:
         """Generate a Twilio Capability Token for client authentication.
@@ -131,7 +153,7 @@ class RocketLeadGenAPI:
                 "call_sid": call_sid,
                 "caller": caller,
                 "status": "ringing",
-                "timestamp": request.form.get("Timestamp", "")
+                "timestamp": datetime.datetime.now().isoformat()
             }
             
             # Log the active calls for debugging
@@ -194,6 +216,59 @@ class RocketLeadGenAPI:
         response.headers.add('Access-Control-Allow-Methods', 'GET')
         
         return response, 200
+    
+    def get_current_calls_jsonp(self) -> str:
+        """JSONP version of current calls endpoint.
+        
+        Returns:
+            str: JSONP callback with JSON data
+        """
+        # Convert active_calls dictionary to a list
+        calls_list = list(active_calls.values())
+        callback = request.args.get('callback', 'callback')
+        logging.info(f"JSONP current calls request - Returning {len(calls_list)} active calls with callback {callback}")
+        
+        data = {"calls": calls_list}
+        
+        return f"{callback}({json.dumps(data)});"
+    
+    def call_events(self) -> Response:
+        """Server-sent events endpoint for real-time call updates.
+        
+        Returns:
+            Response: Streaming response with call events
+        """
+        def generate():
+            yield "data: {\"connected\": true}\n\n"
+            
+            # Track the keys we've sent to avoid duplicates
+            sent_keys = set()
+            
+            while True:
+                # Get current calls
+                calls_list = list(active_calls.values())
+                
+                # Find calls we haven't sent yet
+                for call in calls_list:
+                    call_sid = call["call_sid"]
+                    if call_sid not in sent_keys:
+                        sent_keys.add(call_sid)
+                        yield f"data: {json.dumps(call)}\n\n"
+                
+                # Clean up sent_keys for calls no longer active
+                active_sids = set(active_calls.keys())
+                expired_sids = sent_keys - active_sids
+                for sid in expired_sids:
+                    sent_keys.remove(sid)
+                    yield f"data: {json.dumps({'call_sid': sid, 'status': 'removed'})}\n\n"
+                
+                time.sleep(1)  # Check every second
+        
+        response = Response(stream_with_context(generate()), content_type="text/event-stream")
+        response.headers.add('Cache-Control', 'no-cache')
+        response.headers.add('X-Accel-Buffering', 'no')
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        return response
     
     def answer_call(self) -> Tuple[Response, int]:
         """Allow an agent to answer a specific call.
