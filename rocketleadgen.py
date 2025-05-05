@@ -206,6 +206,15 @@ class RocketLeadGenAPI:
         Returns:
             tuple: JSON response with calls data and HTTP status code
         """
+        # Get request details for debugging
+        user_agent = request.headers.get('User-Agent', 'Unknown')
+        referrer = request.headers.get('Referer', 'None')
+        host = request.headers.get('Host', 'Unknown')
+        remote_addr = request.remote_addr
+        
+        # Log the request details
+        logging.info(f"Current calls request from {remote_addr} - UA: {user_agent[:50]}... - Referrer: {referrer} - Host: {host}")
+        
         # Convert active_calls dictionary to a list
         calls_list = list(active_calls.values())
         logging.info(f"Current calls request - Returning {len(calls_list)} active calls: {json.dumps(calls_list)}")
