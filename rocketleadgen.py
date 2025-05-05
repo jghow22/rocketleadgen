@@ -213,14 +213,20 @@ class RocketLeadGenAPI:
         remote_addr = request.remote_addr
         
         # Log the request details
-        logging.info(f"Current calls request from {remote_addr} - UA: {user_agent[:50]}... - Referrer: {referrer} - Host: {host}")
+        logging.info(f"CALL CHECK REQUEST - from {remote_addr} - UA: {user_agent[:50]}... - Referrer: {referrer} - Host: {host}")
         
         # Convert active_calls dictionary to a list
         calls_list = list(active_calls.values())
-        logging.info(f"Current calls request - Returning {len(calls_list)} active calls: {json.dumps(calls_list)}")
+        
+        # IMPORTANT DEBUG - Always log active calls detail
+        logging.info(f"ACTIVE CALLS STATUS - Active call count: {len(calls_list)}")
+        for call in calls_list:
+            logging.info(f"ACTIVE CALL DETAIL - SID: {call.get('call_sid')} - From: {call.get('caller')} - Status: {call.get('status')}")
         
         # Create the response with proper CORS headers
         response = jsonify({"calls": calls_list})
+        
+        # Add CORS headers explicitly
         response.headers.add('Access-Control-Allow-Origin', '*')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
         response.headers.add('Access-Control-Allow-Methods', 'GET')
