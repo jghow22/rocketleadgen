@@ -59,6 +59,7 @@ class RocketLeadGenAPI:
         self.app.route('/answer-call', methods=['POST'])(self.answer_call)
         self.app.route('/end-call', methods=['POST'])(self.end_call)
         self.app.route('/call-events', methods=['GET'])(self.call_events)
+        self.app.route('/call-status-html', methods=['GET'])(self.call_status_html)
     
     def index(self) -> str:
         """Simple index route for API status check.
@@ -231,6 +232,49 @@ class RocketLeadGenAPI:
         data = {"calls": calls_list}
         
         return f"{callback}({json.dumps(data)});"
+    
+    def call_status_html(self) -> str:
+        """Provide current calls status as an HTML response.
+        
+        Returns:
+            str: HTML response with call data embedded
+        """
+        # Convert active_calls dictionary to a list
+        calls_list = list(active_calls.values())
+        timestamp = datetime.datetime.now().isoformat()
+        
+        # Create a simple HTML response with embedded data
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Call Status</title>
+            <script>
+                // This will be executed when the iframe loads
+                window.onload = function() {{
+                    // Check if we're in an iframe
+                    if (window.parent !== window) {{
+                        // Send data to parent
+                        window.parent.postMessage({{
+                            type: 'calls_data',
+                            calls: {json.dumps(calls_list)},
+                            timestamp: '{timestamp}'
+                        }}, '*');
+                    }}
+                }};
+            </script>
+        </head>
+        <body>
+            <div style="display:none;">
+                Call data loaded at {timestamp}
+                Call count: {len(calls_list)}
+            </div>
+        </body>
+        </html>
+        """
+        
+        logging.info(f"HTML call status request - Returning {len(calls_list)} active calls")
+        return html
     
     def call_events(self) -> Response:
         """Server-sent events endpoint for real-time call updates.
