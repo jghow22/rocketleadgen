@@ -1,6 +1,7 @@
 import os
 import logging
 import json
+import datetime
 from typing import Dict, Union, Tuple, Any, Optional, List
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
@@ -47,6 +48,7 @@ class RocketLeadGenAPI:
     def _register_routes(self) -> None:
         """Register all API endpoints."""
         self.app.route('/', methods=['GET'])(self.index)
+        self.app.route('/test-connection', methods=['GET'])(self.test_connection)
         self.app.route('/generate-token', methods=['GET'])(self.generate_token)
         self.app.route('/handle-call', methods=['POST'])(self.handle_call)
         self.app.route('/call-status', methods=['POST'])(self.call_status)
@@ -61,6 +63,27 @@ class RocketLeadGenAPI:
             str: Status message
         """
         return "Rocket Lead Gen API is running."
+    
+    def test_connection(self) -> Tuple[Response, int]:
+        """Simple endpoint to test frontend to backend communication.
+        
+        Returns:
+            tuple: JSON response with timestamp and HTTP status code
+        """
+        timestamp = datetime.datetime.now().isoformat()
+        logging.info(f"Test connection endpoint called at {timestamp}")
+        
+        response = jsonify({
+            "status": "ok",
+            "message": "Backend is reachable",
+            "timestamp": timestamp
+        })
+        
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+        response.headers.add('Access-Control-Allow-Methods', 'GET')
+        
+        return response, 200
     
     def generate_token(self) -> Tuple[Response, int]:
         """Generate a Twilio Capability Token for client authentication.
@@ -163,7 +186,14 @@ class RocketLeadGenAPI:
         # Convert active_calls dictionary to a list
         calls_list = list(active_calls.values())
         logging.info(f"Current calls request - Returning {len(calls_list)} active calls: {json.dumps(calls_list)}")
-        return jsonify({"calls": calls_list}), 200
+        
+        # Create the response with proper CORS headers
+        response = jsonify({"calls": calls_list})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+        response.headers.add('Access-Control-Allow-Methods', 'GET')
+        
+        return response, 200
     
     def answer_call(self) -> Tuple[Response, int]:
         """Allow an agent to answer a specific call.
@@ -219,10 +249,16 @@ class RocketLeadGenAPI:
                 )
                 logging.info(f"Updated Twilio call {call_sid} to connect to agent {agent_name}")
             
-            return jsonify({
+            response = jsonify({
                 "success": True,
                 "message": f"Call {call_sid} connected to {agent_name}"
-            }), 200
+            })
+            
+            response.headers.add('Access-Control-Allow-Origin', '*')
+            response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+            response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+            
+            return response, 200
         except Exception as e:
             logging.error(f"Error answering call: {e}")
             return jsonify({
@@ -268,10 +304,16 @@ class RocketLeadGenAPI:
             active_calls.pop(call_sid, None)
             logging.info(f"Removed call {call_sid} from active calls")
             
-            return jsonify({
+            response = jsonify({
                 "success": True,
                 "message": f"Call {call_sid} ended"
-            }), 200
+            })
+            
+            response.headers.add('Access-Control-Allow-Origin', '*')
+            response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+            response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+            
+            return response, 200
         except Exception as e:
             logging.error(f"Error ending call: {e}")
             return jsonify({
